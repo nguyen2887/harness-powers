@@ -1,40 +1,22 @@
 # Harness Backlog
 
-Use this file when an agent discovers a missing harness capability but should
-not change the operating model immediately.
+Harness improvement items are stored in the durable layer, not in this file.
+Do not maintain a markdown list here — it would drift from the database.
 
-## Template
+Record friction / improvement items:
 
-```md
-## Missing Harness Capability
-
-### Title
-
-Short name.
-
-### Discovered While
-
-Task or story that exposed the gap.
-
-### Current Pain
-
-What was hard, repeated, ambiguous, or unsafe?
-
-### Suggested Improvement
-
-What should be added or changed?
-
-### Risk
-
-Tiny, normal, or high-risk.
-
-CLI value: `--risk tiny`, `--risk normal`, or `--risk high-risk`.
-
-### Status
-
-proposed | accepted | implemented | rejected
+```bash
+scripts/bin/harness-cli backlog add --title "<short name>" --pain "<what was hard>"
+scripts/bin/harness-cli backlog add --title "<name>" --pain "<pain>" --risk tiny --predicted "<expected impact>"
 ```
 
-## Items
+Review and close:
 
-No backlog items yet.
+```bash
+scripts/bin/harness-cli query backlog --open
+scripts/bin/harness-cli query backlog --closed
+scripts/bin/harness-cli backlog close --id <id> --outcome "<measured result>"
+```
+
+Risk uses the lane vocabulary: `tiny`, `normal`, or `high-risk` (`low` is not
+valid).

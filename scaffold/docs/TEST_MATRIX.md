@@ -1,33 +1,28 @@
 # Test Matrix
 
-This file maps product behavior to proof.
+The behavior-to-proof matrix is stored in the durable layer, not in this file.
+Do not maintain a markdown table here — it would drift from the database.
 
-No product behavior has been defined or implemented yet. Do not mark a row
-implemented until tests or validation evidence exist.
+Query current proof status:
 
-## Status Values
+```bash
+scripts/bin/harness-cli query matrix
+scripts/bin/harness-cli query matrix --numeric   # for copying values back into `story update`
+```
 
-| Status | Meaning |
-| --- | --- |
-| planned | Accepted as intended behavior, not implemented |
-| in_progress | Actively being built |
-| implemented | Implemented and proof exists |
-| changed | Contract changed after earlier implementation |
-| retired | No longer part of the product contract |
+Record proof as stories are built (numeric booleans, `1`/`0`):
 
-## Matrix
+```bash
+scripts/bin/harness-cli story update --id US-XXX --unit 1 --integration 1 --e2e 0 --platform 0
+```
 
-| Story | Contract | Unit | Integration | E2E | Platform | Status | Evidence |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| TBD | Add rows when story packets are created | no | no | no | no | planned | none |
+## Proof Layer Meaning
 
-## Evidence Rules
+- Unit: pure domain and application rules.
+- Integration: backend enforcement, data integrity, provider behavior, jobs,
+  service contracts.
+- E2E: user-visible browser flows.
+- Platform: shell, deployment, mobile, desktop, or runtime behavior that cannot
+  be proven in lower layers.
 
-- Unit proof covers pure domain and application rules.
-- Integration proof covers backend enforcement, data integrity, provider
-  behavior, jobs, or service contracts.
-- E2E proof covers user-visible browser flows.
-- Platform proof covers only shell, deployment, mobile, desktop, or runtime
-  behavior that cannot be proven in lower layers.
-- A story can be implemented without every proof column if the story packet
-  explains why.
+A story may ship without every proof column if its packet explains why.

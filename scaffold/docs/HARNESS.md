@@ -258,10 +258,9 @@ scripts/bin/harness-cli story verify US-012
 When `trace --story <id>` links to a story whose verification command has never
 passed, the trace still records but prints an advisory warning before close.
 
-Use `story verify-all` before merges, maturity claims, and benchmark runs. It
-runs every configured story verification command, prints one result per story,
-skips stories without `verify_command`, and exits 1 if any configured story
-fails.
+Use `story verify-all` before merges. It runs every configured story
+verification command, prints one result per story, skips stories without
+`verify_command`, and exits 1 if any configured story fails.
 
 `story verify` accepts only the story id. Configure the command with
 `story add --verify` or `story update --verify`. Record proof booleans with
@@ -272,7 +271,11 @@ Use `scripts/bin/harness-cli query matrix --numeric` when copying proof values
 back into `story update`. The default matrix output is human-readable
 `yes`/`no`; the numeric output mirrors CLI input.
 
-## Phase 5 Evolution Commands
+## Optional Evolution Commands
+
+These commands support harness self-inspection. They are optional; the core task
+loop does not depend on them.
+
 
 Tool discovery:
 
@@ -290,8 +293,8 @@ scripts/bin/harness-cli audit
 ```
 
 `score-context` is advisory; it reports context-rule coverage without changing
-the trace. `audit` reports drift categories and an entropy score documented in
-`docs/HARNESS_AUDIT.md`.
+the trace. `audit` reports drift categories and an entropy score. These
+evolution commands are optional; the core task loop does not depend on them.
 
 Interventions are separate from traces:
 
