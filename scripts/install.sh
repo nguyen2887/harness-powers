@@ -48,16 +48,19 @@ fi
 # --- 3. Tool registry: external-review / repo-explore -------------------------
 register_tool() {
   local name="$1" capability="$2" responsibility="$3" description="$4"
-  if ! command -v "$name" >/dev/null 2>&1; then
+  local cmd_path
+  cmd_path="$(command -v "$name" 2>/dev/null)" || true
+  if [ -z "$cmd_path" ]; then
     step "CLI '$name' not on PATH. Skipped registration."
     return 0
   fi
   if [ "$DRY_RUN" = "--dry-run" ]; then
-    step "DRY RUN: would register '$name' as capability '$capability'"
+    step "DRY RUN: would register '$name' ($cmd_path) as capability '$capability'"
     return 0
   fi
+  # Register the resolved path so the CLI's own PATH probe cannot disagree.
   if (cd "$DIRECTORY" && "$CLI" tool register --name "$name" --kind cli \
-      --capability "$capability" --command "$name" \
+      --capability "$capability" --command "$cmd_path" \
       --description "$description" --responsibility "$responsibility"); then
     step "Registered '$name' -> $capability"
   else

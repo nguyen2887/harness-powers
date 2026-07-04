@@ -55,14 +55,18 @@ if (Test-Path $traceSpec) {
 
 # --- 3. Tool registry: external-review / repo-explore ------------------------
 function Register-HarnessTool($name, $capability, $responsibility, $description) {
-    if (-not (Get-Command $name -ErrorAction SilentlyContinue)) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if (-not $cmd) {
         Write-Step "CLI '$name' not on PATH. Skipped registration (register later with: harness-cli tool register)."
         return
     }
-    if ($DryRun) { Write-Step "DRY RUN: would register '$name' as capability '$capability'"; return }
+    # Register the resolved path: the Rust CLI's PATH probe does not apply
+    # PATHEXT on Windows, so a bare name like 'codex' fails its existence check.
+    $cmdPath = $cmd.Source
+    if ($DryRun) { Write-Step "DRY RUN: would register '$name' ($cmdPath) as capability '$capability'"; return }
     try {
         & $cli tool register --name $name --kind cli --capability $capability `
-            --command $name --description $description --responsibility $responsibility 2>&1 | ForEach-Object {
+            --command $cmdPath --description $description --responsibility $responsibility 2>&1 | ForEach-Object {
             Write-Step "  $_"
         }
         if ($LASTEXITCODE -eq 0) {
