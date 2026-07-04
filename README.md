@@ -49,47 +49,57 @@ Key choices:
 
 ## Install
 
-One-time, in Claude Code (registers the marketplace globally — marketplaces
-have no project scope; the plugin itself stays project-scoped):
+One-time, in Claude Code:
 
 ```
-/plugin marketplace add C:\Users\<you>\Codes\harness-powers
+/plugin marketplace add nguyen2887/harness-powers
+/plugin install harness-powers@harness-powers
 ```
 
-Do NOT `/plugin install` at user level — per-repo enablement is handled by the
-installer below via `.claude/settings.local.json` (`enabledPlugins` +
-`extraKnownMarketplaces`), which overrides user-level settings for that repo
-only. If you already installed globally, disable it: `/plugin` → harness-powers
-→ disable at user level.
+Global install is intended: `/harness-powers:init` must be available in brand-new
+empty projects. The pipeline itself does NOT activate globally — it only
+auto-triggers in repos whose `CLAUDE.md` carries the harness-powers block, which
+`init` writes. Repos without the block keep running Superpowers untouched.
 
-Per harness repo (PowerShell / bash):
+## Start a project
 
-```powershell
-& "$HOME\Codes\harness-powers\scripts\install.ps1" -Directory C:\path\to\repo
+```
+mkdir my-project && cd my-project && claude
+> /harness-powers:init
+> (commit happens, restart session)
+> "I want to build ..."
 ```
 
-```bash
-~/Codes/harness-powers/scripts/install.sh /path/to/repo
-```
+`init` is idempotent and merge-safe (never overwrites existing files). It:
 
-The installer:
-
-1. Appends the bootstrap block to the repo's `CLAUDE.md` (idempotent, marker-guarded) —
-   this is what makes the pipeline auto-trigger and tells Superpowers to stand down.
-2. Appends the lean-trace override note to `docs/TRACE_SPEC.md`.
-3. Registers `codex` (capability `external-review`) and `agy` (capability
+1. `git init` if needed, then copies the vendored scaffold (46 files: AGENTS.md,
+   docs/, templates, SQL schema, `harness-cli` binary).
+2. Runs `harness-cli init` to create `harness.db`.
+3. Appends the pipeline block to `CLAUDE.md` (marker-guarded) — this is what
+   makes the pipeline auto-trigger and tells Superpowers to stand down.
+4. Ensures the lean-trace override note in `docs/TRACE_SPEC.md`.
+5. Registers `codex` (capability `external-review`) and `agy` (capability
    `repo-explore`) in the harness tool registry when those CLIs are on PATH,
    then runs `tool check`.
-4. Enables the plugin for that repo only, by merging `enabledPlugins` and
-   `extraKnownMarketplaces` into `.claude/settings.local.json` (personal,
-   gitignored — the machine-specific marketplace path never gets committed).
 
-Both installers accept a dry-run flag (`-DryRun` / `--dry-run` as second arg).
+It also works on repos that already have a harness scaffold — existing files are
+skipped, only the harness-powers wiring is added.
 
 **Iterating on skills:** installed plugins are cached under
-`~/.claude/plugins/cache/`, not read in-place. After editing skills here, run
+`~/.claude/plugins/cache/`, not read in-place. After editing skills, push and run
 `/plugin marketplace update harness-powers` to refresh. To test edits live
 without the cache, launch with `claude --plugin-dir ~/Codes/harness-powers`.
+
+## Vendored scaffold
+
+`scaffold/` is vendored from
+[repository-harness](https://github.com/hoangnb24/repository-harness) (MIT,
+(c) 2025 Hoang Nguyen — see `LICENSES-repository-harness-MIT.txt`), pinned at
+harness-cli v0.1.11. Only the windows-x64 binary is bundled; other platforms
+download theirs from the upstream releases. The root `.gitignore` template is
+stored as `scaffold/gitignore` (no dot) so it stays inert inside this repo, and
+no `CLAUDE.md` lives under `scaffold/` — the block is appended from
+`templates/` at init time so this repo's own sessions never load it.
 
 ## Acceptance test
 
@@ -101,7 +111,8 @@ change. A working install classifies the task through `harness-powers:intake`
 
 ```
 .claude-plugin/   plugin.json + marketplace.json
-skills/           intake / designing / implementing / debugging / done
+skills/           init / intake / designing / implementing / debugging / done
+scaffold/         vendored repository-harness template (+ harness-cli.exe)
 templates/        claude-md-block.md, trace-spec-lean-block.md
-scripts/          install.ps1, install.sh
+scripts/          init-project.ps1, init-project.sh
 ```

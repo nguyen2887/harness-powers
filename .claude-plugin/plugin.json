@@ -1,7 +1,7 @@
 {
   "name": "harness-powers",
-  "description": "Lean Superpowers-style process pipeline for repos using the repository-harness scaffold: intake -> designing -> implementing -> done, plus systematic debugging and external cross-model review gates.",
-  "version": "0.1.0",
+  "description": "Self-contained lean process pipeline with a vendored repository-harness scaffold: /harness-powers:init bootstraps any project, then intake -> designing -> implementing -> done, plus systematic debugging and external cross-model review gates.",
+  "version": "0.2.0",
   "author": {
     "name": "nguyen tran"
   }
