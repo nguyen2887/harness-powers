@@ -69,4 +69,38 @@ register_tool codex external-review "Verification" "GPT reviewer via Codex CLI f
 register_tool agy repo-explore "Context selection" "Gemini explorer via Antigravity CLI for wide repo scans"
 [ "$DRY_RUN" = "--dry-run" ] || (cd "$DIRECTORY" && "$CLI" tool check)
 
+# --- 4. Enable plugin for this project only -----------------------------------
+SETTINGS_DIR="$DIRECTORY/.claude"
+SETTINGS_FILE="$SETTINGS_DIR/settings.local.json"
+PLUGIN_KEY="harness-powers@harness-powers"
+MARKETPLACE_PATH="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+if [ "$DRY_RUN" = "--dry-run" ]; then
+  step "DRY RUN: would enable $PLUGIN_KEY in .claude/settings.local.json"
+elif [ -f "$SETTINGS_FILE" ] && grep -q "$PLUGIN_KEY" "$SETTINGS_FILE"; then
+  step "Plugin already enabled in .claude/settings.local.json. Skipped."
+elif [ -f "$SETTINGS_FILE" ] && command -v jq >/dev/null 2>&1; then
+  tmp="$(mktemp)"
+  jq --arg key "$PLUGIN_KEY" --arg path "$MARKETPLACE_PATH" \
+     '.enabledPlugins[$key] = true
+      | .extraKnownMarketplaces["harness-powers"] = {source:{source:"local",path:$path}}' \
+     "$SETTINGS_FILE" > "$tmp" && mv "$tmp" "$SETTINGS_FILE"
+  step "Enabled $PLUGIN_KEY for this project only (.claude/settings.local.json)"
+elif [ -f "$SETTINGS_FILE" ]; then
+  step "MANUAL STEP (jq not found): merge into $SETTINGS_FILE:"
+  step "  \"enabledPlugins\": { \"$PLUGIN_KEY\": true }"
+  step "  \"extraKnownMarketplaces\": { \"harness-powers\": { \"source\": { \"source\": \"local\", \"path\": \"$MARKETPLACE_PATH\" } } }"
+else
+  mkdir -p "$SETTINGS_DIR"
+  cat > "$SETTINGS_FILE" <<EOF
+{
+  "enabledPlugins": { "$PLUGIN_KEY": true },
+  "extraKnownMarketplaces": {
+    "harness-powers": { "source": { "source": "local", "path": "$MARKETPLACE_PATH" } }
+  }
+}
+EOF
+  step "Enabled $PLUGIN_KEY for this project only (.claude/settings.local.json)"
+fi
+
 step "Done. Open a fresh Claude Code session in the target repo to activate the pipeline."

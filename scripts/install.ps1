@@ -87,4 +87,24 @@ try {
     Pop-Location
 }
 
+# --- 4. Enable plugin for this project only ----------------------------------
+$settingsDir = Join-Path $Directory '.claude'
+$settingsFile = Join-Path $settingsDir 'settings.local.json'
+$pluginKey = 'harness-powers@harness-powers'
+$marketplacePath = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+if ($DryRun) {
+    Write-Step "DRY RUN: would enable '$pluginKey' in .claude/settings.local.json"
+} else {
+    New-Item -ItemType Directory -Force $settingsDir | Out-Null
+    $raw = if (Test-Path $settingsFile) { Get-Content $settingsFile -Raw } else { '' }
+    $settings = if ($raw.Trim()) { $raw | ConvertFrom-Json -AsHashtable } else { @{} }
+    if (-not $settings.ContainsKey('enabledPlugins')) { $settings['enabledPlugins'] = @{} }
+    $settings['enabledPlugins'][$pluginKey] = $true
+    if (-not $settings.ContainsKey('extraKnownMarketplaces')) { $settings['extraKnownMarketplaces'] = @{} }
+    $settings['extraKnownMarketplaces']['harness-powers'] = @{ source = @{ source = 'local'; path = $marketplacePath } }
+    Set-Content -Path $settingsFile -Value (ConvertTo-Json $settings -Depth 10)
+    Write-Step "Enabled '$pluginKey' for this project only (.claude/settings.local.json)"
+}
+
 Write-Step 'Done. Open a fresh Claude Code session in the target repo to activate the pipeline.'

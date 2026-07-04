@@ -49,12 +49,18 @@ Key choices:
 
 ## Install
 
-One-time, in Claude Code:
+One-time, in Claude Code (registers the marketplace globally — marketplaces
+have no project scope; the plugin itself stays project-scoped):
 
 ```
 /plugin marketplace add C:\Users\<you>\Codes\harness-powers
-/plugin install harness-powers@harness-powers
 ```
+
+Do NOT `/plugin install` at user level — per-repo enablement is handled by the
+installer below via `.claude/settings.local.json` (`enabledPlugins` +
+`extraKnownMarketplaces`), which overrides user-level settings for that repo
+only. If you already installed globally, disable it: `/plugin` → harness-powers
+→ disable at user level.
 
 Per harness repo (PowerShell / bash):
 
@@ -74,8 +80,16 @@ The installer:
 3. Registers `codex` (capability `external-review`) and `agy` (capability
    `repo-explore`) in the harness tool registry when those CLIs are on PATH,
    then runs `tool check`.
+4. Enables the plugin for that repo only, by merging `enabledPlugins` and
+   `extraKnownMarketplaces` into `.claude/settings.local.json` (personal,
+   gitignored — the machine-specific marketplace path never gets committed).
 
 Both installers accept a dry-run flag (`-DryRun` / `--dry-run` as second arg).
+
+**Iterating on skills:** installed plugins are cached under
+`~/.claude/plugins/cache/`, not read in-place. After editing skills here, run
+`/plugin marketplace update harness-powers` to refresh. To test edits live
+without the cache, launch with `claude --plugin-dir ~/Codes/harness-powers`.
 
 ## Acceptance test
 
