@@ -1,0 +1,13 @@
+{
+  "name": "harness-powers",
+  "owner": {
+    "name": "nguyen tran"
+  },
+  "plugins": [
+    {
+      "name": "harness-powers",
+      "source": "./",
+      "description": "Lean harness-native process skills for Claude Code. Only for repos with the repository-harness scaffold installed."
+    }
+  ]
+}
