@@ -1,0 +1,25 @@
+# harness-powers external tool tuning — committed, per-repo.
+#
+# Division of responsibility:
+#   - The harness tool registry answers "is the tool installed on this machine?"
+#     (per machine, via `harness-cli tool check`).
+#   - This file answers "how should it be invoked in THIS repo?"
+#     (per repo, version-controlled).
+#
+# Missing file, section, or key = the skills invoke the tool without that flag
+# and the CLI's own defaults apply. Edit freely; no other step needed.
+
+[review]
+# Used by both review gates: Gate 1 (plan review, `codex exec`) and
+# Gate 2 (code review, `codex exec review --base <branch>`).
+model = "gpt-5.5-codex"
+# Reasoning effort, passed as `-c model_reasoning_effort="<value>"`.
+# Typical values: minimal | low | medium | high (model-dependent).
+reasoning_effort = "high"
+# Sandbox for Gate 1 plan review: read-only | workspace-write | danger-full-access
+sandbox = "read-only"
+
+[explore]
+# Used for wide repo scans (capability repo-explore).
+# Run `agy models` to list available model names, then set one here.
+model = ""

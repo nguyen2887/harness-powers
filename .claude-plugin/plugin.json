@@ -1,7 +1,7 @@
 {
   "name": "harness-powers",
   "description": "Self-contained lean process pipeline with a vendored repository-harness scaffold: /harness-powers:init bootstraps any project, then intake -> designing -> implementing -> done, plus systematic debugging and external cross-model review gates.",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "author": {
     "name": "nguyen tran"
   }

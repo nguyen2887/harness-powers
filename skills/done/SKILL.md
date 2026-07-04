@@ -26,11 +26,13 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION OUTPUT
 
 2. **Code-review gate**
    - `harness-cli query tools --capability external-review --status present`
-   - **Provider present** (e.g. codex): run it on the diff, read-only:
+   - **Provider present** (e.g. codex): read the repo's `harness-powers.toml` `[review]` section for tuning (model, reasoning_effort — skip any flag whose key is missing or empty), then use codex's dedicated review mode on the branch diff:
 
      ```
-     codex exec --sandbox read-only "Review the diff of this branch against <base> as a skeptical senior engineer. Look for: correctness bugs, spec deviations from <story path>, missing tests, security issues, silent behavior changes. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If the diff is sound, say so plainly."
+     codex exec review --base <base branch> -m <model> -c model_reasoning_effort="<effort>" "Review as a skeptical senior engineer. Check for: correctness bugs, deviations from the spec in <story path>, missing tests, security issues, silent behavior changes. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If the diff is sound, say so plainly."
      ```
+
+     Uncommitted work-in-progress: use `--uncommitted` instead of `--base`. If the installed codex lacks the `review` subcommand, fall back to plain `codex exec --sandbox read-only` with the same instructions plus "Diff of this branch against <base>".
 
    - **Triage** — verify each finding technically before acting: Critical/Important → fix (re-enter TDD loop for behavior changes), then re-run the gate. Minor → fix or reject with a one-line technical reason.
    - **Stop rule** — loop until a round adds zero NEW Critical/Important findings. More than 4 rounds → escalate to your human partner.

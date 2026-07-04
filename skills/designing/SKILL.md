@@ -15,7 +15,7 @@ Do NOT write implementation code, scaffold projects, or edit files outside `docs
 
 ## Process
 
-1. **Explore context** — relevant `docs/product/*`, `docs/stories/*`, `docs/decisions/*`, and the affected code. For wide repo scans, check `harness-cli query tools --capability repo-explore --status present`; if a provider is present (e.g. `agy`), you may delegate broad exploration to it non-interactively — but verify any file paths it reports before relying on them.
+1. **Explore context** — relevant `docs/product/*`, `docs/stories/*`, `docs/decisions/*`, and the affected code. For wide repo scans, check `harness-cli query tools --capability repo-explore --status present`; if a provider is present (e.g. `agy`), you may delegate broad exploration to it non-interactively (`agy --print --model <model from harness-powers.toml [explore]> "<question>"`; omit `--model` if unset) — but verify any file paths it reports before relying on them.
 2. **Clarify** — ask questions ONE at a time, multiple choice preferred. Understand purpose, constraints, success criteria. If the request spans multiple independent subsystems, flag it and decompose into separate stories first.
 3. **Propose 2-3 approaches** — with trade-offs, lead with your recommendation and why.
 4. **Write artifacts** (by lane, below).
@@ -40,13 +40,11 @@ Plans assume the implementer has zero context: name the files to touch per task,
 ## Plan-Review Gate
 
 1. `harness-cli query tools --capability external-review --status present`
-2. **Provider present** (e.g. codex): run it fresh-context, read-only, pointed at the artifacts:
+2. **Provider present** (e.g. codex): read the repo's `harness-powers.toml` `[review]` section for tuning (model, reasoning_effort, sandbox — skip any flag whose key is missing or empty), then run fresh-context, pointed at the artifacts:
 
    ```
-   codex exec --sandbox read-only "Review this implementation plan as a skeptical senior engineer. Files: <story/design/execplan paths>. Look for: missing requirements, contradictions, untestable acceptance criteria, hidden risks, wrong sequencing, scope creep. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If you find nothing significant, say so plainly."
+   codex exec --sandbox <sandbox> -m <model> -c model_reasoning_effort="<effort>" "Review this implementation plan as a skeptical senior engineer. Files: <story/design/execplan paths>. Look for: missing requirements, contradictions, untestable acceptance criteria, hidden risks, wrong sequencing, scope creep. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If you find nothing significant, say so plainly."
    ```
-
-   (Adjust invocation flags to the installed CLI version; the registry `--command` field is the source of truth.)
 3. **Triage** — verify each finding technically before acting. No performative agreement, no blind implementation:
    - Critical / Important: fix the design, then re-run the gate.
    - Minor: fix, or reject with a one-line technical reason.
