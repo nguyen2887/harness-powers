@@ -21,5 +21,5 @@ sandbox = "read-only"
 
 [explore]
 # Used for wide repo scans (capability repo-explore).
-# Run `agy models` to list available model names, then set one here.
-model = ""
+# Run `agy models` to list available model names; use the display name as shown.
+model = "Gemini 3.5 Flash (Medium)"
