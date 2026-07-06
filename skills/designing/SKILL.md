@@ -15,7 +15,7 @@ Do NOT write implementation code, scaffold projects, or edit files outside `docs
 
 ## Process
 
-1. **Explore context** — relevant `docs/product/*`, `docs/stories/*`, `docs/decisions/*`, and the affected code. For wide repo scans, check `harness-cli query tools --capability repo-explore --status present`; if a provider is present (e.g. `agy`), you may delegate broad exploration to it non-interactively (`agy --print --model <model from harness-powers.toml [explore]> "<question>"`; omit `--model` if unset) — but verify any file paths it reports before relying on them.
+1. **Explore context** — relevant `docs/product/*`, `docs/stories/*`, `docs/decisions/*`, and the affected code. For wide repo scans, check `harness-cli query tools --capability repo-explore --status present`; if a provider is present (e.g. `agy`), you may delegate broad exploration to it non-interactively (`agy --print --new-project --add-dir "$PWD" --model <model from harness-powers.toml [explore]> "<question>"`; omit `--model` if unset) — but verify any file paths it reports before relying on them. **`--new-project --add-dir "$PWD"` is MANDATORY**: without it agy silently attaches to its most recently used project — possibly a DIFFERENT repo — and returns structurally plausible but completely wrong results, with no error.
 2. **Clarify** — ask questions ONE at a time, multiple choice preferred. Understand purpose, constraints, success criteria. If the request spans multiple independent subsystems, flag it and decompose into separate stories first.
 3. **Propose 2-3 approaches** — with trade-offs, lead with your recommendation and why.
 4. **Write artifacts** (by lane, below).

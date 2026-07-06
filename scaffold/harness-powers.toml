@@ -12,7 +12,9 @@
 [review]
 # Used by both review gates: Gate 1 (plan review, `codex exec`) and
 # Gate 2 (code review, `codex exec review --base <branch>`).
-model = "gpt-5.5-codex"
+# MUST be a model that exists (`codex exec -m <model>` with a bogus name HANGS
+# instead of erroring — verify with the codex docs/CLI if unsure).
+model = "gpt-5.5"
 # Reasoning effort, passed as `-c model_reasoning_effort="<value>"`.
 # Typical values: minimal | low | medium | high (model-dependent).
 reasoning_effort = "high"
