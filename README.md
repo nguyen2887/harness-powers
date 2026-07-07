@@ -38,7 +38,8 @@ Key choices:
 - **Lean trace profile.** Minimal/Standard tiers only; the Detailed tier is
   retired (the installer patches `docs/TRACE_SPEC.md` accordingly).
 - **Cross-model review gates.** Plan review after designing (`codex exec`),
-  code review before done (`codex exec review --base <branch>`). Wired through
+  code review before done (`codex exec` with a Claude-prepared review packet).
+  Wired through
   the harness **tool registry** by capability, never by tool name:
   `external-review` (e.g. GPT via Codex CLI) and `repo-explore` (e.g. Gemini
   via Antigravity CLI). Absent provider = clean skip with a self-review

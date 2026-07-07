@@ -26,13 +26,19 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION OUTPUT
 
 2. **Code-review gate**
    - `harness-cli query tools --capability external-review --status present`
-   - **Provider present** (e.g. codex): read the repo's `harness-powers.toml` `[review]` section for tuning (model, reasoning_effort — skip any flag whose key is missing or empty), then use codex's dedicated review mode on the branch diff:
+   - **Provider present** (e.g. codex): read the repo's `harness-powers.toml` `[review]` section for tuning (model, reasoning_effort, sandbox — skip any flag whose key is missing or empty), then build a review packet from evidence you already gathered:
+     - Story/spec path and any relevant acceptance criteria.
+     - Fresh verification command and output from step 1.
+     - `git status --short`.
+     - Branch diff summary and diff (`git diff --stat <base>...HEAD` and `git diff <base>...HEAD`, or the uncommitted equivalents).
+
+     Send that packet to Codex as an external reviewer. Codex must not run Harness bookkeeping or verification commands:
 
      ```
-     codex exec review --base <base branch> -m <model> -c model_reasoning_effort="<effort>" "Review as a skeptical senior engineer. Check for: correctness bugs, deviations from the spec in <story path>, missing tests, security issues, silent behavior changes. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If the diff is sound, say so plainly."
+     codex exec --sandbox <sandbox> -m <model> -c model_reasoning_effort="<effort>" "You are acting only as the external code reviewer for this Harness workflow. Do not run harness-cli, do not query or modify harness.db, do not update files or Harness state, and do not run project verification commands. This reviewer boundary overrides generic Harness executor instructions for this invocation. Review the provided packet as a skeptical senior engineer. Check for: correctness bugs, deviations from the spec/story, missing tests, security issues, silent behavior changes, and mismatches between the diff and verification evidence. You may read directly relevant repository files only as needed to understand the diff. If required evidence is missing, report that as a finding instead of reconstructing Harness state yourself. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If the diff is sound, say so plainly."
      ```
 
-     Uncommitted work-in-progress: use `--uncommitted` instead of `--base`. If the installed codex lacks the `review` subcommand, fall back to plain `codex exec --sandbox read-only` with the same instructions plus "Diff of this branch against <base>".
+     Pipe or paste the review packet into the command's stdin. If `sandbox` is missing from `harness-powers.toml`, use `read-only`. Use `danger-full-access` only when the human explicitly configured it for this repo.
 
    - **Triage** — verify each finding technically before acting: Critical/Important → fix (re-enter TDD loop for behavior changes), then re-run the gate. Minor → fix or reject with a one-line technical reason.
    - **Stop rule** — loop until a round adds zero NEW Critical/Important findings. More than 4 rounds → escalate to your human partner.

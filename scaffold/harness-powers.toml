@@ -11,7 +11,7 @@
 
 [review]
 # Used by both review gates: Gate 1 (plan review, `codex exec`) and
-# Gate 2 (code review, `codex exec review --base <branch>`).
+# Gate 2 (code review, `codex exec` with a prepared review packet).
 # MUST be a model that exists (`codex exec -m <model>` with a bogus name HANGS
 # instead of erroring — verify with the codex docs/CLI if unsure).
 model = "gpt-5.5"
