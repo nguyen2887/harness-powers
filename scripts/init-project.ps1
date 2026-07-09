@@ -114,6 +114,30 @@ Get-ChildItem $scaffold -Recurse -File | ForEach-Object {
 $verb = if ($DryRun) { 'DRY RUN: would copy' } else { 'Scaffold:' }
 Write-Step "$verb $created file(s) created, $skipped already present (skipped)."
 
+# --- 2b. Portable skills for non-Claude CLIs (Codex -> .codex, agy -> .agents) ---
+# Claude Code uses the harness-powers plugin skills; these vendored copies give
+# Codex and agy the same intake -> done procedures. Merge-safe.
+$portableSkills = Join-Path $root 'portable-skills'
+if (Test-Path $portableSkills) {
+    $skCreated = 0; $skSkipped = 0
+    Get-ChildItem $portableSkills -Directory | ForEach-Object {
+        $name = $_.Name
+        foreach ($base in @('.codex/skills', '.agents/skills')) {
+            $dest = Join-Path $Directory (Join-Path $base $name)
+            if (Test-Path (Join-Path $dest 'SKILL.md')) {
+                $skSkipped++
+            } elseif ($DryRun) {
+                $skCreated++
+            } else {
+                New-Item -ItemType Directory -Force $dest | Out-Null
+                Copy-Item (Join-Path $_.FullName '*') $dest -Recurse -Force
+                $skCreated++
+            }
+        }
+    }
+    Write-Step "Portable skills: $skCreated copied, $skSkipped already present (.codex/skills + .agents/skills)."
+}
+
 # --- 3. harness-cli + database -------------------------------------------------
 Ensure-CliBinary
 $cli = Join-Path $Directory 'scripts\bin\harness-cli.exe'

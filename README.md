@@ -123,8 +123,9 @@ change. A working install classifies the task through `harness-powers:intake`
 
 ```
 .claude-plugin/   plugin.json + marketplace.json
-skills/           init / intake / designing / implementing / debugging / done
+skills/           init / intake / designing / implementing / debugging / done (Claude Code plugin)
+portable-skills/  CLI-agnostic intake→done skills; init vendors them into .codex/skills + .agents/skills
 scaffold/         vendored repository-harness template (+ harness-cli.exe)
-templates/        claude-md-block.md, trace-spec-lean-block.md
+templates/        claude-md-block.md, agents-md-block.md, trace-spec-lean-block.md
 scripts/          init-project.ps1, init-project.sh
 ```

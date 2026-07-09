@@ -122,6 +122,31 @@ while IFS= read -r -d '' file; do
 done < <(find "$SCAFFOLD" -type f -print0)
 step "Scaffold: $created file(s) created, $skipped already present (skipped)."
 
+# --- 2b. Portable skills for non-Claude CLIs (Codex -> .codex, agy -> .agents) ---
+# Claude Code uses the harness-powers plugin skills; these vendored copies give
+# Codex and agy the same intake -> done procedures. Merge-safe.
+PORTABLE_SKILLS="$ROOT/portable-skills"
+if [ -d "$PORTABLE_SKILLS" ]; then
+  sk_created=0; sk_skipped=0
+  for src in "$PORTABLE_SKILLS"/*/; do
+    [ -d "$src" ] || continue
+    name="$(basename "$src")"
+    for base in ".codex/skills" ".agents/skills"; do
+      dest="$DIRECTORY/$base/$name"
+      if [ -f "$dest/SKILL.md" ]; then
+        sk_skipped=$((sk_skipped + 1))
+      elif [ "$DRY_RUN" = "--dry-run" ]; then
+        sk_created=$((sk_created + 1))
+      else
+        mkdir -p "$dest"
+        cp -R "$src." "$dest"
+        sk_created=$((sk_created + 1))
+      fi
+    done
+  done
+  step "Portable skills: $sk_created copied, $sk_skipped already present (.codex/skills + .agents/skills)."
+fi
+
 # --- 3. harness-cli + database ---------------------------------------------------
 ensure_cli_binary
 CLI="$DIRECTORY/scripts/bin/harness-cli"
