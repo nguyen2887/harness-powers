@@ -79,9 +79,11 @@ mkdir my-project && cd my-project && claude
 
 `init` is idempotent and merge-safe (never overwrites existing files). It:
 
-1. `git init` if needed, then copies the vendored scaffold (46 files: AGENTS.md,
-   docs/, templates, SQL schema, `harness-cli` binary).
-2. Runs `harness-cli init` to create `harness.db`.
+1. `git init` if needed, then copies the vendored scaffold (35 files: AGENTS.md,
+   docs/, templates, SQL schema, vendored `harness-cli.exe`).
+2. On macOS/Linux, auto-downloads the matching `harness-cli` binary from the
+   pinned upstream release (checksum-verified); the vendored `.exe` covers
+   Windows. Then runs `harness-cli init` to create `harness.db`.
 3. Appends the pipeline block to `CLAUDE.md` (marker-guarded) — this is what
    makes the pipeline auto-trigger and tells Superpowers to stand down.
 4. Ensures the lean-trace override note in `docs/TRACE_SPEC.md`.
@@ -102,8 +104,9 @@ without the cache, launch with `claude --plugin-dir ~/Codes/harness-powers`.
 `scaffold/` is vendored from
 [repository-harness](https://github.com/hoangnb24/repository-harness) (MIT,
 (c) 2025 Hoang Nguyen — see `LICENSES-repository-harness-MIT.txt`), pinned at
-harness-cli v0.1.11. Only the windows-x64 binary is bundled; other platforms
-download theirs from the upstream releases. The root `.gitignore` template is
+harness-cli v0.1.11. Only the windows-x64 binary is bundled; on macOS/Linux
+`init` auto-downloads the matching binary from the pinned upstream release
+(`harness-cli-v0.1.11`) and checksum-verifies it. The root `.gitignore` template is
 stored as `scaffold/gitignore` (no dot) so it stays inert inside this repo, and
 no `CLAUDE.md` lives under `scaffold/` — the block is appended from
 `templates/` at init time so this repo's own sessions never load it.

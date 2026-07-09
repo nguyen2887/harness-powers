@@ -17,6 +17,73 @@ function Write-Step($msg) { Write-Host "[harness-powers] $msg" }
 $Directory = (Resolve-Path $Directory).Path
 Write-Step "Target project: $Directory"
 
+# Bump this when the vendored scaffold pins a new harness-cli version.
+$HarnessCliTag = 'harness-cli-v0.1.11'
+$HarnessCliReleaseBase = 'https://github.com/hoangnb24/repository-harness/releases/download'
+
+function Detect-Platform {
+    switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
+        'X64'   { 'windows-x64' }
+        'Arm64' { 'windows-arm64' }
+        default { 'unsupported' }
+    }
+}
+
+# Fetch the platform harness-cli into scripts\bin\harness-cli.exe when missing.
+# Soft-fails (warns, never aborts) so init still completes offline.
+function Ensure-CliBinary {
+    $binDir = Join-Path $Directory 'scripts\bin'
+    $target = Join-Path $binDir 'harness-cli.exe'
+    if (Test-Path $target) { return }
+    if (Test-Path (Join-Path $binDir 'harness-cli')) { return }
+
+    $platform = Detect-Platform
+    if ($platform -eq 'unsupported') {
+        Write-Step "WARNING: unsupported platform ($([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture)); cannot fetch harness-cli."
+        return
+    }
+
+    $name = "harness-cli-$platform.exe"
+    $url = "$HarnessCliReleaseBase/$HarnessCliTag/$name"
+
+    if ($DryRun) {
+        Write-Step "DRY RUN: would download $name ($HarnessCliTag) into scripts\bin\harness-cli.exe"
+        return
+    }
+
+    New-Item -ItemType Directory -Force $binDir | Out-Null
+    $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ([System.IO.Path]::GetRandomFileName())
+    New-Item -ItemType Directory -Force $tmp | Out-Null
+    $tmpBin = Join-Path $tmp $name
+    Write-Step "Downloading $name ($HarnessCliTag)..."
+    try {
+        Invoke-WebRequest -Uri $url -OutFile $tmpBin -UseBasicParsing -ErrorAction Stop
+    } catch {
+        Write-Step "WARNING: download failed ($url): $($_.Exception.Message)."
+        Write-Step 'Fetch it manually into scripts\bin\harness-cli.exe and re-run.'
+        Remove-Item -Recurse -Force $tmp; return
+    }
+    # Verify the checksum when the .sha256 is published alongside the binary.
+    try {
+        $shaTmp = "$tmpBin.sha256"
+        Invoke-WebRequest -Uri "$url.sha256" -OutFile $shaTmp -UseBasicParsing -ErrorAction Stop
+        $expected = (((Get-Content $shaTmp -Raw) -split '\s+') | Where-Object { $_ })[0]
+        $actual = (Get-FileHash $tmpBin -Algorithm SHA256).Hash
+        if ($expected -and $actual -and ($expected.ToLower() -ne $actual.ToLower())) {
+            Write-Step "WARNING: checksum mismatch for $name (expected $expected, got $actual). Not installing."
+            Remove-Item -Recurse -Force $tmp; return
+        }
+    } catch { }  # no checksum published -> skip verification
+    Copy-Item $tmpBin $target -Force
+    Remove-Item -Recurse -Force $tmp
+    try {
+        & $target --help *> $null
+        Write-Step "Installed scripts\bin\harness-cli.exe ($platform)."
+    } catch {
+        Write-Step 'WARNING: downloaded harness-cli did not run cleanly; check the binary.'
+    }
+}
+
 # --- 1. git init --------------------------------------------------------------
 if (Test-Path (Join-Path $Directory '.git')) {
     Write-Step 'Git repository already present.'
@@ -48,11 +115,14 @@ $verb = if ($DryRun) { 'DRY RUN: would copy' } else { 'Scaffold:' }
 Write-Step "$verb $created file(s) created, $skipped already present (skipped)."
 
 # --- 3. harness-cli + database -------------------------------------------------
+Ensure-CliBinary
 $cli = Join-Path $Directory 'scripts\bin\harness-cli.exe'
 if (-not (Test-Path $cli)) { $cli = Join-Path $Directory 'scripts/bin/harness-cli' }
-if (-not (Test-Path $cli)) {
-    Write-Step 'WARNING: no harness-cli binary for this platform. Only windows-x64 is vendored.'
-    Write-Step 'Download your platform binary from https://github.com/hoangnb24/repository-harness/releases into scripts/bin/ and re-run.'
+if ((-not (Test-Path $cli)) -and $DryRun) {
+    Write-Step 'DRY RUN: harness-cli not present yet; would download it, then run harness-cli init.'
+} elseif (-not (Test-Path $cli)) {
+    Write-Step 'WARNING: no runnable harness-cli (auto-download failed or offline; see warnings above).'
+    Write-Step "Fetch the $HarnessCliTag binary from https://github.com/hoangnb24/repository-harness/releases into scripts\bin\harness-cli.exe and re-run."
 } elseif (Test-Path (Join-Path $Directory 'harness.db')) {
     Write-Step 'harness.db already present.'
 } elseif ($DryRun) {

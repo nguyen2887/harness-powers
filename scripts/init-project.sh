@@ -14,6 +14,85 @@ TEMPLATES="$ROOT/templates"
 step() { echo "[harness-powers] $*"; }
 step "Target project: $DIRECTORY"
 
+# Bump this when the vendored scaffold pins a new harness-cli version.
+HARNESS_CLI_TAG="harness-cli-v0.1.11"
+HARNESS_CLI_RELEASE_BASE="https://github.com/hoangnb24/repository-harness/releases/download"
+
+detect_platform() {
+  local os arch
+  os="$(uname -s)"; arch="$(uname -m)"
+  case "$os:$arch" in
+    Darwin:arm64)               echo "macos-arm64" ;;
+    Darwin:x86_64)              echo "macos-x64" ;;
+    Linux:x86_64)               echo "linux-x64" ;;
+    Linux:aarch64|Linux:arm64)  echo "linux-arm64" ;;
+    *)                          echo "unsupported" ;;
+  esac
+}
+
+sha256_of() {
+  if command -v shasum >/dev/null 2>&1; then shasum -a 256 "$1" | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else echo ""; fi
+}
+
+# Fetch the platform harness-cli into scripts/bin/harness-cli when it is missing.
+# Soft-fails (warns, never aborts) so init still completes offline; the vendored
+# windows-x64 .exe is left as the Windows fallback.
+ensure_cli_binary() {
+  local bin_dir="$DIRECTORY/scripts/bin"
+  local target="$bin_dir/harness-cli"
+  [ -x "$target" ] && return 0                    # runnable native binary already present
+  [ -x "$bin_dir/harness-cli.exe" ] && return 0   # Windows: vendored .exe covers it
+
+  local platform; platform="$(detect_platform)"
+  if [ "$platform" = "unsupported" ]; then
+    step "WARNING: unsupported platform ($(uname -s)/$(uname -m)); cannot fetch harness-cli."
+    return 0
+  fi
+
+  local name="harness-cli-$platform"
+  local url="$HARNESS_CLI_RELEASE_BASE/$HARNESS_CLI_TAG/$name"
+
+  if [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would download $name ($HARNESS_CLI_TAG) into scripts/bin/harness-cli"
+    return 0
+  fi
+
+  if ! command -v curl >/dev/null 2>&1; then
+    step "WARNING: curl not found; cannot download $name."
+    step "Fetch $url into scripts/bin/harness-cli, chmod +x it, and re-run."
+    return 0
+  fi
+
+  mkdir -p "$bin_dir"
+  local tmp; tmp="$(mktemp -d)"
+  step "Downloading $name ($HARNESS_CLI_TAG)..."
+  if ! curl -fsSL "$url" -o "$tmp/$name"; then
+    step "WARNING: download failed ($url)."
+    step "Fetch it manually into scripts/bin/harness-cli and re-run."
+    rm -rf "$tmp"; return 0
+  fi
+  # Verify the checksum when the .sha256 is published alongside the binary.
+  if curl -fsSL "$url.sha256" -o "$tmp/$name.sha256" 2>/dev/null; then
+    local expected actual
+    expected="$(awk '{print $1; exit}' "$tmp/$name.sha256")"
+    actual="$(sha256_of "$tmp/$name")"
+    if [ -n "$expected" ] && [ -n "$actual" ] && [ "$expected" != "$actual" ]; then
+      step "WARNING: checksum mismatch for $name (expected $expected, got $actual). Not installing."
+      rm -rf "$tmp"; return 0
+    fi
+  fi
+  cp "$tmp/$name" "$target"
+  chmod 755 "$target"
+  rm -rf "$tmp"
+  if "$target" --help >/dev/null 2>&1; then
+    step "Installed scripts/bin/harness-cli ($platform)."
+  else
+    step "WARNING: downloaded harness-cli did not run cleanly; check the binary."
+  fi
+}
+
 # --- 1. git init ---------------------------------------------------------------
 if [ -d "$DIRECTORY/.git" ]; then
   step "Git repository already present."
@@ -44,11 +123,14 @@ done < <(find "$SCAFFOLD" -type f -print0)
 step "Scaffold: $created file(s) created, $skipped already present (skipped)."
 
 # --- 3. harness-cli + database ---------------------------------------------------
+ensure_cli_binary
 CLI="$DIRECTORY/scripts/bin/harness-cli"
 [ -x "$CLI" ] || CLI="$DIRECTORY/scripts/bin/harness-cli.exe"
-if [ ! -x "$CLI" ]; then
-  step "WARNING: no runnable harness-cli for this platform (only windows-x64 is vendored)."
-  step "Download your platform binary from https://github.com/hoangnb24/repository-harness/releases into scripts/bin/ and re-run."
+if [ ! -x "$CLI" ] && [ "$DRY_RUN" = "--dry-run" ]; then
+  step "DRY RUN: harness-cli not present yet; would download it, then run harness-cli init."
+elif [ ! -x "$CLI" ]; then
+  step "WARNING: no runnable harness-cli (auto-download failed or offline; see warnings above)."
+  step "Fetch the $HARNESS_CLI_TAG binary from https://github.com/hoangnb24/repository-harness/releases into scripts/bin/harness-cli and re-run."
 elif [ -f "$DIRECTORY/harness.db" ]; then
   step "harness.db already present."
 elif [ "$DRY_RUN" = "--dry-run" ]; then

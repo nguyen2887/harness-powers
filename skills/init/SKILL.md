@@ -18,7 +18,7 @@ Turn the current directory into a harness-powers-ready project in one pass.
 
    If `CLAUDE_PLUGIN_ROOT` is not set in your environment, locate the plugin root by finding this skill's own directory (the plugin root is two levels up from `skills/init/`).
 
-   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs the vendored `harness-cli`, creates `harness.db`, appends the pipeline block to `CLAUDE.md` (marker-guarded), ensures the lean trace profile note in `docs/TRACE_SPEC.md`, and registers `codex` (external-review) and `agy` (repo-explore) when present on PATH.
+   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli` (vendored `.exe` on Windows; auto-downloaded per-platform from the pinned upstream release on macOS/Linux), creates `harness.db`, appends the pipeline block to `CLAUDE.md` (marker-guarded), ensures the lean trace profile note in `docs/TRACE_SPEC.md`, and registers `codex` (external-review) and `agy` (repo-explore) when present on PATH.
 
 2. **Read the script output.** Every line is prefixed `[harness-powers]`. Verify:
    - scaffold files created (or skipped as already present — fine on re-run)
@@ -37,6 +37,6 @@ Turn the current directory into a harness-powers-ready project in one pass.
 
 ## Notes
 
-- Only the Windows x64 `harness-cli` binary is vendored. On other platforms the script warns and points to the upstream releases (https://github.com/hoangnb24/repository-harness/releases) — download the platform binary to `scripts/bin/harness-cli` and re-run.
+- Only the Windows x64 `harness-cli` binary is vendored. On macOS/Linux the script auto-downloads the matching binary (`macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64`) from the pinned upstream release and checksum-verifies it. If the machine is offline or `curl` is missing, it warns and points to the upstream releases (https://github.com/hoangnb24/repository-harness/releases) — download the platform binary to `scripts/bin/harness-cli`, `chmod +x` it, and re-run.
 - Existing files are NEVER overwritten. To refresh a stale scaffold file, delete it and re-run.
 - This skill sets up structure only. Do not start designing or implementing the product here — that is `harness-powers:intake`'s job, in response to an actual request.
