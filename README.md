@@ -1,8 +1,10 @@
 # harness-powers
 
-Lean, harness-native process skills for Claude Code. A distilled fork of the
-[Superpowers](https://github.com/obra/superpowers) workflow philosophy, rebuilt
-to act as the **enforcement layer** for repos that use the
+Lean, harness-native process skills. Installed as a Claude Code plugin, but the
+pipeline it wires into a repo runs on **Claude Code, Codex, Antigravity/agy, and
+Grok** alike (via `AGENTS.md` + vendored skills + a PreToolUse hard gate). A
+distilled fork of the [Superpowers](https://github.com/obra/superpowers) workflow
+philosophy, rebuilt to act as the **enforcement layer** for repos that use the
 [repository-harness](https://github.com/hoangnb24/repository-harness) scaffold.
 
 **Only for harness repos.** Repos without the scaffold should keep using
