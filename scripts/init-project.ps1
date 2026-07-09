@@ -237,4 +237,41 @@ if (Test-Path $cli) {
     }
 }
 
+# --- 7. Hard-gate hooks (plan-review) for Claude / Codex / Grok ------------------
+$gateSrc = Join-Path $root 'gate'
+if (Test-Path $gateSrc) {
+    $gateBin = Join-Path $Directory '.harness-powers/bin/harness-powers-gate'
+    if (Test-Path $gateBin) {
+        Write-Step 'Gate script already present.'
+    } elseif ($DryRun) {
+        Write-Step 'DRY RUN: would install .harness-powers/bin/harness-powers-gate'
+    } else {
+        New-Item -ItemType Directory -Force (Split-Path $gateBin) | Out-Null
+        Copy-Item (Join-Path $gateSrc 'harness-powers-gate') $gateBin -Force
+        Write-Step 'Installed .harness-powers/bin/harness-powers-gate.'
+    }
+
+    function Install-Hook($srcRel, $destRel, $label) {
+        $src = Join-Path $gateSrc $srcRel
+        $dest = Join-Path $Directory $destRel
+        if (Test-Path $dest) {
+            Write-Step "$label hook config exists at $destRel - left as is; add the gate hook manually if you want it there."
+        } elseif ($DryRun) {
+            Write-Step "DRY RUN: would write $destRel ($label gate hook)"
+        } else {
+            New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+            Copy-Item $src $dest -Force
+            Write-Step "Wired $label gate hook -> $destRel"
+        }
+    }
+    Install-Hook 'hooks/codex-hooks.json'     '.codex/hooks.json'               'Codex'
+    Install-Hook 'hooks/grok-hooks.json'      '.grok/hooks/harness-powers.json' 'Grok'
+    Install-Hook 'hooks/claude-settings.json' '.claude/settings.json'           'Claude Code'
+
+    if (-not $DryRun) {
+        Write-Step 'Hard-gate active: edits to code are blocked until each open normal/high-risk story has a reviewer approval.'
+        Write-Step 'TRUST REQUIRED: in Codex and Grok run "/hooks-trust" (or launch with --trust) once, or project hooks will NOT execute. On Windows the hook needs bash (git-bash/WSL).'
+    }
+}
+
 Write-Step 'Init complete. Commit the scaffold, then start a fresh session (the CLAUDE.md block loads at session start).'

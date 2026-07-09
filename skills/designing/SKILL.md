@@ -50,6 +50,7 @@ Plans assume the implementer has zero context: name the files to touch per task,
    - Minor: fix, or reject with a one-line technical reason.
 4. **Stop rule** — loop until a round yields zero NEW Critical/Important findings. 2-3 rounds is normal. More than 4 → stop and escalate to your human partner; the design likely has a structural problem.
 5. **Provider absent** — do one self-review pass with fresh eyes (placeholder scan, internal contradictions, ambiguity, scope check, verify-command check) and note `external-review: inactive` for the trace. Absence is a clean skip, not a failure.
+6. **Record the pass — this unlocks the code-edit hard gate.** After the loop converges (or the self-review pass), record a reviewer approval so implementation may begin: `harness-cli intervention add --story US-XXX --type approval --source reviewer --description "plan-review passed: <rounds, key findings>"` (provider absent → `--description "self-review; external-review inactive"`). Until this record exists, the `PreToolUse` gate keeps blocking every edit outside `docs/`.
 
 ## Red Flags
 

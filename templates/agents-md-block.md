@@ -26,8 +26,14 @@ Pipeline — one entry, one exit:
    Check `harness-cli query tools --capability external-review --status present`.
    Provider present → run it over the plan, fix Critical/Important findings, loop
    until a round adds no new Critical/Important. Provider absent → one honest
-   self-review pass; note `external-review: inactive`. Skipping this gate is a
-   process violation, not a shortcut.
+   self-review pass; note `external-review: inactive`. Then **record the pass** to
+   unlock code edits: `harness-cli intervention add --story <id> --type approval
+   --source reviewer --description "plan-review passed: <summary>"`. Skipping this
+   gate is a process violation, not a shortcut.
+
+   This gate is enforced: a `PreToolUse` hook blocks edits outside `docs/` while any
+   open normal/high-risk story has no reviewer approval. If an edit is blocked, you
+   skipped the review — run it and record the approval above.
 
 2. **Code-review gate** — inside done, before ANY completion claim. Same reviewer
    loop over the actual diff. No "done" / "it works" / "fixed" / "passing" claim is

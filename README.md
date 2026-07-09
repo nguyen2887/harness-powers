@@ -54,6 +54,17 @@ Key choices:
   reviewers never say "no issues" unprompted — the stop rule keeps the loop
   convergent.
 
+- **Runs on every CLI, not just Claude Code.** The pipeline is delivered three
+  ways so Codex, Antigravity/agy, and Grok follow it too: the portable
+  constitution in `AGENTS.md` (all CLIs read it), vendored skills in
+  `.codex/skills/` + `.agents/skills/` (Grok runs on the constitution), and a
+  `PreToolUse` **hard gate** — one `harness-powers-gate` script wired into
+  `.claude/settings.json`, `.codex/hooks.json`, and `.grok/hooks/`. It reads
+  harness.db and blocks edits to code until every open normal/high-risk story
+  has a reviewer `approval` intervention, so the plan-review gate cannot be
+  skipped by a model that "forgot" it. Fail-open (no db/CLI, or a docs-only edit,
+  is always allowed); Codex/Grok project hooks need a one-time trust.
+
 ## Install
 
 One-time, in Claude Code:
@@ -125,6 +136,7 @@ change. A working install classifies the task through `harness-powers:intake`
 .claude-plugin/   plugin.json + marketplace.json
 skills/           init / intake / designing / implementing / debugging / done (Claude Code plugin)
 portable-skills/  CLI-agnostic intake→done skills; init vendors them into .codex/skills + .agents/skills
+gate/             hard-gate script + PreToolUse hook configs (Claude / Codex / Grok)
 scaffold/         vendored repository-harness template (+ harness-cli.exe)
 templates/        claude-md-block.md, agents-md-block.md, trace-spec-lean-block.md
 scripts/          init-project.ps1, init-project.sh

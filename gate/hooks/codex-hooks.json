@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|apply_patch|str_replace|create_file|edit_file",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .harness-powers/bin/harness-powers-gate",
+            "timeout": 10,
+            "statusMessage": "harness-powers plan-review gate"
+          }
+        ]
+      }
+    ]
+  }
+}

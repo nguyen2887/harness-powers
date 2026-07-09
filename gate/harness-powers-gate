@@ -1,0 +1,76 @@
+#!/usr/bin/env bash
+# harness-powers hard gate (PreToolUse hook for Claude Code, Codex, and Grok).
+#
+# Blocks edits to code until the plan-review gate has been recorded for every
+# OPEN normal/high-risk story — i.e. a reviewer 'approval' intervention exists.
+# The signal is objective harness.db state, not something the model must remember.
+#
+# Fail-open by design: any uncertainty (no harness.db, no CLI, unparseable input,
+# a whitelisted/non-code path) ALLOWS the edit. It only ever denies when it is
+# certain there is an open, unreviewed normal/high-risk story.
+#
+# Contract: reads the hook JSON payload on stdin; exit 0 = allow, exit 2 = deny
+# (all three CLIs treat exit code 2 as a block and surface stderr to the model).
+
+payload="$(cat 2>/dev/null || true)"
+
+# Extract the first string value for any of the pipe-separated key names.
+json_str() {
+  printf '%s' "$payload" \
+    | grep -oE "\"($1)\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
+    | head -1 \
+    | sed -E 's/.*:[[:space:]]*"([^"]*)".*/\1/'
+}
+
+tool="$(json_str 'tool_name|toolName')"
+file="$(json_str 'file_path|filePath|path')"
+root="$(json_str 'workspaceRoot|workspace_root|cwd|projectDir')"
+
+# Only guard edit-like tools. Anything else is allowed outright.
+case "$tool" in
+  Edit|Write|MultiEdit|apply_patch|str_replace*|create_file|edit_file|"") : ;;
+  *) exit 0 ;;
+esac
+
+# Without a file target there is nothing to reason about.
+[ -n "$file" ] || exit 0
+
+# Locate the harness repo (the directory holding harness.db).
+start="$root"; [ -n "$start" ] || start="$(dirname "$file")"
+repo=""; d="$start"
+while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
+  if [ -f "$d/harness.db" ]; then repo="$d"; break; fi
+  d="$(dirname "$d")"
+done
+[ -n "$repo" ] || exit 0   # not a harness repo -> never interfere
+
+# Whitelist: docs, harness bookkeeping, and agent config are always allowed
+# (designing writes story docs before the review; config is not product code).
+rel="${file#"$repo"/}"
+case "$rel" in
+  docs/*|.harness-powers/*|harness.db*|.codex/*|.agents/*|.claude/*|.grok/*) exit 0 ;;
+  *.md) exit 0 ;;
+esac
+
+# Need the CLI to inspect state; if it is missing we cannot check -> allow.
+cli="$repo/scripts/bin/harness-cli"
+[ -x "$cli" ] || cli="$repo/scripts/bin/harness-cli.exe"
+[ -x "$cli" ] || exit 0
+
+sql_open="SELECT group_concat(s.id, ', ') FROM story s WHERE s.risk_lane IN ('normal','high_risk') AND s.status IN ('planned','in_progress') AND NOT EXISTS (SELECT 1 FROM intervention i WHERE i.story_id = s.id AND i.type='approval' AND i.source='reviewer');"
+
+blockers="$( (cd "$repo" && "$cli" query sql "$sql_open" 2>/dev/null) \
+  | grep -viE 'group_concat|^-+$' | tr -d ' \t' | grep -vE '^$' | head -1 )"
+
+# No open, unreviewed normal/high-risk story -> allow.
+[ -n "$blockers" ] || exit 0
+
+# Deny: a plan-review gate is outstanding.
+{
+  echo "[harness-powers gate] BLOCKED: plan-review gate not passed for open story(ies): ${blockers}."
+  echo "Edits outside docs/ are blocked until the plan is reviewed."
+  echo "Run the plan-review gate (the designing skill), then record it to unlock:"
+  echo "  scripts/bin/harness-cli intervention add --story <ID> --type approval --source reviewer --description \"plan-review passed: <summary>\""
+  echo "Reviewer unavailable? Do a self-review pass, then record the same with --description \"self-review; external-review inactive\"."
+} >&2
+exit 2

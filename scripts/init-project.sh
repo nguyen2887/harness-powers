@@ -229,4 +229,41 @@ if [ -x "$CLI" ]; then
   [ "$DRY_RUN" = "--dry-run" ] || (cd "$DIRECTORY" && "$CLI" tool check) || true
 fi
 
+# --- 7. Hard-gate hooks (plan-review) for Claude / Codex / Grok ------------------
+GATE_SRC="$ROOT/gate"
+if [ -d "$GATE_SRC" ]; then
+  gate_bin="$DIRECTORY/.harness-powers/bin/harness-powers-gate"
+  if [ -f "$gate_bin" ]; then
+    step "Gate script already present."
+  elif [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would install .harness-powers/bin/harness-powers-gate"
+  else
+    mkdir -p "$(dirname "$gate_bin")"
+    cp "$GATE_SRC/harness-powers-gate" "$gate_bin"
+    chmod 755 "$gate_bin"
+    step "Installed .harness-powers/bin/harness-powers-gate."
+  fi
+
+  install_hook() { # $1 src rel, $2 dest rel, $3 label
+    local src="$GATE_SRC/$1" dest="$DIRECTORY/$2"
+    if [ -f "$dest" ]; then
+      step "$3 hook config exists at $2 — left as is; add the gate hook manually if you want it there."
+    elif [ "$DRY_RUN" = "--dry-run" ]; then
+      step "DRY RUN: would write $2 ($3 gate hook)"
+    else
+      mkdir -p "$(dirname "$dest")"
+      cp "$src" "$dest"
+      step "Wired $3 gate hook -> $2"
+    fi
+  }
+  install_hook "hooks/codex-hooks.json"     ".codex/hooks.json"               "Codex"
+  install_hook "hooks/grok-hooks.json"      ".grok/hooks/harness-powers.json" "Grok"
+  install_hook "hooks/claude-settings.json" ".claude/settings.json"           "Claude Code"
+
+  if [ "$DRY_RUN" != "--dry-run" ]; then
+    step "Hard-gate active: edits to code are blocked until each open normal/high-risk story has a reviewer approval."
+    step "TRUST REQUIRED: in Codex and Grok run '/hooks-trust' (or launch with --trust) once, or project hooks will NOT execute."
+  fi
+fi
+
 step "Init complete. Commit the scaffold, then start a fresh session (the CLAUDE.md block loads at session start)."

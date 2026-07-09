@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .harness-powers/bin/harness-powers-gate",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
