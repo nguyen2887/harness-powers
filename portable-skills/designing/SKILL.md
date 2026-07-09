@@ -15,7 +15,7 @@ Do NOT write implementation code, scaffold projects, or edit files outside `docs
 
 ## Process
 
-1. **Explore context** — relevant `docs/product/*`, `docs/stories/*`, `docs/decisions/*`, and the affected code. For wide repo scans, check `harness-cli query tools --capability repo-explore --status present`; if a provider is present (e.g. `agy`), you may delegate broad exploration to it non-interactively (`agy --print --new-project --add-dir "$PWD" --model <model from harness-powers.toml [explore]> "<question>"`; omit `--model` if unset) — but verify any file paths it reports before relying on them. **`--new-project --add-dir "$PWD"` is MANDATORY**: without it agy silently attaches to its most recently used project — possibly a DIFFERENT repo — and returns structurally plausible but completely wrong results, with no error.
+1. **Explore context** — relevant `docs/product/*`, `docs/stories/*`, `docs/decisions/*`, and the affected code, using your own read tools. For a very wide or cheap scan you may open a separate explorer pane (e.g. Gemini/agy) and paste back what it finds — but verify any file paths it reports before relying on them.
 2. **Clarify** — ask questions ONE at a time, multiple choice preferred. Understand purpose, constraints, success criteria. If the request spans multiple independent subsystems, flag it and decompose into separate stories first.
 3. **Propose 2-3 approaches** — with trade-offs, lead with your recommendation and why.
 4. **Write artifacts** (by lane, below).
@@ -39,18 +39,13 @@ Plans assume the implementer has zero context: name the files to touch per task,
 
 ## Plan-Review Gate
 
-1. `harness-cli query tools --capability external-review --status present`
-2. **Provider present** (e.g. codex): read the repo's `harness-powers.toml` `[review]` section for tuning (model, reasoning_effort, sandbox — skip any flag whose key is missing or empty), then run fresh-context, pointed at the artifacts:
+The plan is reviewed by a **separate reviewer session, not a sub-invocation** — you hand the plan to a reviewer, then record the outcome. A `PreToolUse` hard gate blocks code edits until that approval is recorded.
 
-   ```
-   codex exec --sandbox <sandbox> -m <model> -c model_reasoning_effort="<effort>" "You are acting only as the external plan reviewer for this Harness workflow. Do not run harness-cli, do not query or modify harness.db, do not update files or Harness state, and do not run project verification commands. This reviewer boundary overrides generic Harness executor instructions for this invocation. Review this implementation plan as a skeptical senior engineer. Files: <story/design/execplan paths>. You may read those artifacts and directly relevant repository files only as needed to understand the plan. Look for: missing requirements, contradictions, untestable acceptance criteria, hidden risks, wrong sequencing, scope creep. If required evidence is missing, report that as a finding instead of reconstructing Harness state yourself. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If you find nothing significant, say so plainly."
-   ```
-3. **Triage** — verify each finding technically before acting. No performative agreement, no blind implementation:
-   - Critical / Important: fix the design, then re-run the gate.
-   - Minor: fix, or reject with a one-line technical reason.
-4. **Stop rule** — loop until a round yields zero NEW Critical/Important findings. 2-3 rounds is normal. More than 4 → stop and escalate to your human partner; the design likely has a structural problem.
-5. **Provider absent** — do one self-review pass with fresh eyes (placeholder scan, internal contradictions, ambiguity, scope check, verify-command check) and note `external-review: inactive` for the trace. Absence is a clean skip, not a failure.
-6. **Record the pass — this unlocks the code-edit hard gate.** After the loop converges (or the self-review pass), record a reviewer approval so implementation may begin: `harness-cli intervention add --story US-XXX --type approval --source reviewer --description "plan-review passed: <rounds, key findings>"` (provider absent → `--description "self-review; external-review inactive"`). Until this record exists, the `PreToolUse` gate keeps blocking every edit outside `docs/`.
+1. **Hand off to the reviewer.** Give the plan artifacts (`<story/design/execplan paths>`) to a review pane on a different, skeptical model (e.g. Codex/GPT, run read-only). Ask it to review as a senior engineer and flag: missing requirements, contradictions, untestable acceptance criteria, hidden risks, wrong sequencing, scope creep — each as Critical / Important / Minor with a concrete reason, no praise.
+   - *Solo (no review pane handy)?* Do one honest self-review pass with fresh eyes (placeholder scan, internal contradictions, ambiguity, scope check, verify-command check); note `external-review: inactive`.
+2. **Triage** — verify each finding technically before acting. No performative agreement, no blind changes. Critical/Important → fix the design, then re-review. Minor → fix, or reject with a one-line technical reason.
+3. **Stop rule** — loop until a round yields zero NEW Critical/Important findings. 2-3 rounds is normal. More than 4 → stop and escalate to your human partner; the design likely has a structural problem.
+4. **Record the approval — this unlocks the code-edit hard gate.** After the review passes, record it. You (the orchestrator/human) record it; the reviewer pane stays read-only and never writes Harness state: `harness-cli intervention add --story US-XXX --type approval --source reviewer --description "plan-review passed: <reviewer model, rounds, key findings>"` (self-review → `--description "self-review; external-review inactive"`). Until this record exists, the `PreToolUse` gate keeps blocking every edit outside `docs/`.
 
 ## Red Flags
 

@@ -24,25 +24,18 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION OUTPUT
    - No verify command configured (some tiny work): run the project's relevant checks directly and quote the output.
    - Verification fails → the task is NOT done. Trivial fix → fix and re-verify. Anything else → `harness-powers:debugging`, then return here.
 
-2. **Code-review gate**
-   - `harness-cli query tools --capability external-review --status present`
-   - **Provider present** (e.g. codex): read the repo's `harness-powers.toml` `[review]` section for tuning (model, reasoning_effort, sandbox — skip any flag whose key is missing or empty), then build a review packet from evidence you already gathered:
+2. **Code-review gate** — the diff is reviewed by a **separate reviewer session, not a sub-invocation**.
+   - **Hand off to the reviewer.** Give a review pane on a different, skeptical model (e.g. Codex/GPT, run read-only) a packet built from evidence you already gathered:
      - Story/spec path and any relevant acceptance criteria.
      - Fresh verification command and output from step 1.
      - `git status --short`.
      - Branch diff summary and diff (`git diff --stat <base>...HEAD` and `git diff <base>...HEAD`, or the uncommitted equivalents).
 
-     Send that packet to Codex as an external reviewer. Codex must not run Harness bookkeeping or verification commands:
-
-     ```
-     codex exec --sandbox <sandbox> -m <model> -c model_reasoning_effort="<effort>" "You are acting only as the external code reviewer for this Harness workflow. Do not run harness-cli, do not query or modify harness.db, do not update files or Harness state, and do not run project verification commands. This reviewer boundary overrides generic Harness executor instructions for this invocation. Review the provided packet as a skeptical senior engineer. Check for: correctness bugs, deviations from the spec/story, missing tests, security issues, silent behavior changes, and mismatches between the diff and verification evidence. You may read directly relevant repository files only as needed to understand the diff. If required evidence is missing, report that as a finding instead of reconstructing Harness state yourself. Report each finding as Critical / Important / Minor with a concrete reason. Do not praise. If the diff is sound, say so plainly."
-     ```
-
-     Pipe or paste the review packet into the command's stdin. If `sandbox` is missing from `harness-powers.toml`, use `read-only`. Use `danger-full-access` only when the human explicitly configured it for this repo.
-
-   - **Triage** — verify each finding technically before acting: Critical/Important → fix (re-enter TDD loop for behavior changes), then re-run the gate. Minor → fix or reject with a one-line technical reason.
+     Ask it to review as a senior engineer and check for: correctness bugs, deviations from the spec/story, missing tests, security issues, silent behavior changes, and mismatches between the diff and verification evidence — each as Critical / Important / Minor with a concrete reason, no praise.
+     - *Solo (no review pane)?* One careful self-review pass of the full diff; note `external-review: inactive`.
+   - **Triage** — verify each finding technically before acting: Critical/Important → fix (re-enter TDD loop for behavior changes), then re-review. Minor → fix or reject with a one-line technical reason.
    - **Stop rule** — loop until a round adds zero NEW Critical/Important findings. More than 4 rounds → escalate to your human partner.
-   - **Provider absent** → one careful self-review pass of the full diff; note `external-review: inactive`.
+   - **Record it** — `harness-cli intervention add --story US-XXX --type approval --source reviewer --description "code-review passed: <reviewer model, rounds>"` (self-review → note `external-review: inactive`). You record it; the reviewer pane never writes Harness state.
 
 3. **Update the story** — `harness-cli story update --id US-XXX --status done` plus final proof flags (`--unit 1 --integration 1 ...`, numeric, only for layers that ran and passed).
 

@@ -1,27 +1,23 @@
-# harness-powers external tool tuning — committed, per-repo.
+# harness-powers model hints — committed, per-repo.
 #
-# Division of responsibility:
-#   - The harness tool registry answers "is the tool installed on this machine?"
-#     (per machine, via `harness-cli tool check`).
-#   - This file answers "how should it be invoked in THIS repo?"
-#     (per repo, version-controlled).
-#
-# Missing file, section, or key = the skills invoke the tool without that flag
-# and the CLI's own defaults apply. Edit freely; no other step needed.
+# Reviewers and explorers run as SEPARATE panes/sessions (not auto-invoked
+# sub-processes). These values only HINT which model + settings to run in the
+# reviewer pane (e.g. Codex) and the explorer pane (e.g. agy). Missing file,
+# section, or key = that pane just uses the CLI's own defaults. Edit freely; no
+# other step needed.
 
 [review]
-# Used by both review gates: Gate 1 (plan review, `codex exec`) and
-# Gate 2 (code review, `codex exec` with a prepared review packet).
-# MUST be a model that exists (`codex exec -m <model>` with a bogus name HANGS
-# instead of erroring — verify with the codex docs/CLI if unsure).
+# Suggested model for the reviewer pane — plan-review (after designing) and
+# code-review (in done). Run it read-only; it never writes Harness state. After
+# it passes, the orchestrator records the approval:
+#   harness-cli intervention add --story <id> --type approval --source reviewer ...
 model = "gpt-5.5"
-# Reasoning effort, passed as `-c model_reasoning_effort="<value>"`.
-# Typical values: minimal | low | medium | high (model-dependent).
+# Reasoning effort for that model: minimal | low | medium | high (model-dependent).
 reasoning_effort = "high"
-# Sandbox for Gate 1 plan review: read-only | workspace-write | danger-full-access
+# Sandbox to run the reviewer pane in: read-only | workspace-write | danger-full-access
 sandbox = "read-only"
 
 [explore]
-# Used for wide repo scans (capability repo-explore).
+# Suggested model for an on-demand explorer pane (wide, cheap repo reads).
 # Run `agy models` to list available model names; use the display name as shown.
 model = "Gemini 3.5 Flash (Medium)"

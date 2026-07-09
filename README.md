@@ -39,18 +39,16 @@ Key choices:
   `done` only, so it cannot be forgotten or duplicated.
 - **Lean trace profile.** Minimal/Standard tiers only; the Detailed tier is
   retired (the installer patches `docs/TRACE_SPEC.md` accordingly).
-- **Cross-model review gates.** Plan review after designing (`codex exec`),
-  code review before done (`codex exec` with a Claude-prepared review packet).
-  Wired through
-  the harness **tool registry** by capability, never by tool name:
-  `external-review` (e.g. GPT via Codex CLI) and `repo-explore` (e.g. Gemini
-  via Antigravity CLI). Absent provider = clean skip with a self-review
-  fallback, per the registry's degrade ladder.
+- **Cross-model review gates.** Plan review after designing, code review before
+  done — each handed to a **separate reviewer session** on a skeptical model (e.g.
+  GPT via Codex, run read-only), not a sub-invocation. The orchestrator records the
+  reviewer's `approval` intervention in `harness.db` (that is what releases the hard
+  gate); the reviewer never writes Harness state. No reviewer handy = a self-review
+  pass instead.
 - **Per-repo model tuning.** `harness-powers.toml` at the target repo root
-  (committed, installed by init) sets the review model, reasoning effort,
-  sandbox, and explore model. The registry answers "is the tool installed?"
-  (per machine); the toml answers "how is it invoked?" (per repo). Missing
-  keys fall back to each CLI's own defaults.
+  (committed, installed by init) hints which model, reasoning effort, and sandbox to
+  run in the reviewer/explorer pane. Missing keys fall back to each CLI's own
+  defaults.
 - **Review stop rule.** Fix Critical/Important, reject Minor with reasons; loop
   until a round adds no new Critical/Important; escalate past 4 rounds. LLM
   reviewers never say "no issues" unprompted — the stop rule keeps the loop
