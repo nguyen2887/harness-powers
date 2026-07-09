@@ -88,7 +88,10 @@ mkdir my-project && cd my-project && claude
 > "I want to build ..."
 ```
 
-`init` is idempotent and merge-safe (never overwrites existing files). It:
+`init` is idempotent. Re-running refreshes harness-powers-owned artifacts in place
+(the marker-guarded `CLAUDE.md`/`AGENTS.md` blocks, vendored `.codex/.agents` skills,
+and the gate script), so a plugin upgrade lands without deleting anything by hand;
+your own files are never overwritten. It:
 
 1. `git init` if needed, then copies the vendored scaffold (35 files: AGENTS.md,
    docs/, templates, SQL schema, vendored `harness-cli.exe`).

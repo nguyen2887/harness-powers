@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Initializes a project with the vendored repository-harness scaffold and the
-# harness-powers pipeline. Idempotent and merge-safe: existing files are never
-# overwritten. Mirror of init-project.ps1.
+# harness-powers pipeline. Idempotent. Re-running REFRESHES harness-powers-owned
+# artifacts (pipeline blocks between markers, vendored skills, the gate script) so
+# a new plugin version lands without deleting anything by hand; your own files
+# (code, docs, harness-powers.toml, hook JSON, harness.db, and anything outside the
+# markers) are never overwritten. Mirror of init-project.ps1.
 set -euo pipefail
 
 DIRECTORY="${1:-$(pwd)}"
@@ -93,6 +96,34 @@ ensure_cli_binary() {
   fi
 }
 
+# Replace the harness-powers block between markers in $1 with template $2 (the
+# template includes its own BEGIN/END markers), or append it if absent. Only the
+# marked block is touched; everything else in the file is preserved verbatim.
+upsert_block() {
+  local file="$1" template="$2" label="$3"
+  if [ -f "$file" ] && grep -q 'HARNESS-POWERS:BEGIN' "$file"; then
+    if [ "$DRY_RUN" = "--dry-run" ]; then
+      step "DRY RUN: would refresh harness-powers block in $label"
+      return 0
+    fi
+    local tmp; tmp="$(mktemp)"
+    awk -v tpl="$template" '
+      /HARNESS-POWERS:BEGIN/ && !repl {
+        while ((getline line < tpl) > 0) print line
+        close(tpl); in_old=1; repl=1; next
+      }
+      in_old && /HARNESS-POWERS:END/ { in_old=0; next }
+      !in_old { print }
+    ' "$file" > "$tmp" && mv "$tmp" "$file"
+    step "Refreshed harness-powers block in $label."
+  elif [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would append harness-powers block to $label"
+  else
+    { [ -f "$file" ] && [ -s "$file" ] && echo ""; cat "$template"; } >> "$file"
+    step "Appended harness-powers block to $label."
+  fi
+}
+
 # --- 1. git init ---------------------------------------------------------------
 if [ -d "$DIRECTORY/.git" ]; then
   step "Git repository already present."
@@ -124,27 +155,26 @@ step "Scaffold: $created file(s) created, $skipped already present (skipped)."
 
 # --- 2b. Portable skills for non-Claude CLIs (Codex -> .codex, agy -> .agents) ---
 # Claude Code uses the harness-powers plugin skills; these vendored copies give
-# Codex and agy the same intake -> done procedures. Merge-safe.
+# Codex and agy the same intake -> done procedures. Overwritten on re-init so a new
+# plugin version refreshes them (they are harness-powers-owned, not your files).
 PORTABLE_SKILLS="$ROOT/portable-skills"
 if [ -d "$PORTABLE_SKILLS" ]; then
-  sk_created=0; sk_skipped=0
+  sk_n=0
   for src in "$PORTABLE_SKILLS"/*/; do
     [ -d "$src" ] || continue
     name="$(basename "$src")"
     for base in ".codex/skills" ".agents/skills"; do
       dest="$DIRECTORY/$base/$name"
-      if [ -f "$dest/SKILL.md" ]; then
-        sk_skipped=$((sk_skipped + 1))
-      elif [ "$DRY_RUN" = "--dry-run" ]; then
-        sk_created=$((sk_created + 1))
+      if [ "$DRY_RUN" = "--dry-run" ]; then
+        sk_n=$((sk_n + 1))
       else
         mkdir -p "$dest"
         cp -R "$src." "$dest"
-        sk_created=$((sk_created + 1))
+        sk_n=$((sk_n + 1))
       fi
     done
   done
-  step "Portable skills: $sk_created copied, $sk_skipped already present (.codex/skills + .agents/skills)."
+  step "Portable skills: $sk_n vendored/refreshed (.codex/skills + .agents/skills)."
 fi
 
 # --- 3. harness-cli + database ---------------------------------------------------
@@ -165,27 +195,11 @@ else
   step "Initialized harness.db."
 fi
 
-# --- 4. CLAUDE.md pipeline block ---------------------------------------------------
-CLAUDE_MD="$DIRECTORY/CLAUDE.md"
-if [ -f "$CLAUDE_MD" ] && grep -q 'HARNESS-POWERS:BEGIN' "$CLAUDE_MD"; then
-  step "CLAUDE.md already has the harness-powers block."
-elif [ "$DRY_RUN" = "--dry-run" ]; then
-  step "DRY RUN: would append harness-powers block to CLAUDE.md"
-else
-  { [ -f "$CLAUDE_MD" ] && [ -s "$CLAUDE_MD" ] && echo ""; cat "$TEMPLATES/claude-md-block.md"; } >> "$CLAUDE_MD"
-  step "Appended harness-powers block to CLAUDE.md."
-fi
+# --- 4. CLAUDE.md pipeline block (refreshed in place on re-init) --------------------
+upsert_block "$DIRECTORY/CLAUDE.md" "$TEMPLATES/claude-md-block.md" "CLAUDE.md"
 
 # --- 4b. AGENTS.md pipeline block (Codex / agy / Grok read this; Claude does not) ----
-AGENTS_MD="$DIRECTORY/AGENTS.md"
-if [ -f "$AGENTS_MD" ] && grep -q 'HARNESS-POWERS:BEGIN' "$AGENTS_MD"; then
-  step "AGENTS.md already has the harness-powers block."
-elif [ "$DRY_RUN" = "--dry-run" ]; then
-  step "DRY RUN: would append harness-powers block to AGENTS.md"
-else
-  { [ -f "$AGENTS_MD" ] && [ -s "$AGENTS_MD" ] && echo ""; cat "$TEMPLATES/agents-md-block.md"; } >> "$AGENTS_MD"
-  step "Appended harness-powers block to AGENTS.md."
-fi
+upsert_block "$DIRECTORY/AGENTS.md" "$TEMPLATES/agents-md-block.md" "AGENTS.md"
 
 # --- 5. Lean trace profile note ------------------------------------------------------
 TRACE_SPEC="$DIRECTORY/docs/TRACE_SPEC.md"
@@ -233,15 +247,13 @@ fi
 GATE_SRC="$ROOT/gate"
 if [ -d "$GATE_SRC" ]; then
   gate_bin="$DIRECTORY/.harness-powers/bin/harness-powers-gate"
-  if [ -f "$gate_bin" ]; then
-    step "Gate script already present."
-  elif [ "$DRY_RUN" = "--dry-run" ]; then
-    step "DRY RUN: would install .harness-powers/bin/harness-powers-gate"
+  if [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would install/refresh .harness-powers/bin/harness-powers-gate"
   else
     mkdir -p "$(dirname "$gate_bin")"
     cp "$GATE_SRC/harness-powers-gate" "$gate_bin"
     chmod 755 "$gate_bin"
-    step "Installed .harness-powers/bin/harness-powers-gate."
+    step "Installed/refreshed .harness-powers/bin/harness-powers-gate."
   fi
 
   install_hook() { # $1 src rel, $2 dest rel, $3 label

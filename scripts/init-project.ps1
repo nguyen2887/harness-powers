@@ -1,7 +1,9 @@
 # Initializes a project with the vendored repository-harness scaffold and the
 # harness-powers pipeline: git init, merge-copy scaffold files, install
-# harness-cli, create harness.db, wire CLAUDE.md, register external tools.
-# Idempotent and merge-safe: existing files are never overwritten.
+# harness-cli, create harness.db, wire CLAUDE.md/AGENTS.md, register external tools.
+# Idempotent. Re-running REFRESHES harness-powers-owned artifacts (pipeline blocks
+# between markers, vendored skills, the gate script) so a new plugin version lands
+# without deleting anything by hand; your own files are never overwritten.
 param(
     [string]$Directory = (Get-Location).Path,
     [switch]$DryRun
@@ -84,6 +86,31 @@ function Ensure-CliBinary {
     }
 }
 
+# Replace the harness-powers block between markers in $file with the template
+# (which includes its own BEGIN/END markers), or append it if absent. Only the
+# marked block is touched; everything else in the file is preserved verbatim.
+function Upsert-Block($file, $template, $label) {
+    $existing = if (Test-Path $file) { Get-Content $file -Raw } else { '' }
+    $block = (Get-Content $template -Raw).TrimEnd("`r", "`n")
+    $beginMarker = '<!-- HARNESS-POWERS:BEGIN -->'
+    $endMarker   = '<!-- HARNESS-POWERS:END -->'
+    $bi = $existing.IndexOf($beginMarker)
+    $ei = $existing.IndexOf($endMarker)
+    if ($bi -ge 0 -and $ei -ge 0) {
+        if ($DryRun) { Write-Step "DRY RUN: would refresh harness-powers block in $label"; return }
+        $before = $existing.Substring(0, $bi)
+        $after  = $existing.Substring($ei + $endMarker.Length)
+        Set-Content -Path $file -Value ($before + $block + $after) -NoNewline
+        Write-Step "Refreshed harness-powers block in $label."
+    } elseif ($DryRun) {
+        Write-Step "DRY RUN: would append harness-powers block to $label"
+    } else {
+        $sep = if ($existing -and -not $existing.EndsWith("`n")) { "`n`n" } elseif ($existing) { "`n" } else { '' }
+        Set-Content -Path $file -Value ($existing + $sep + $block) -NoNewline
+        Write-Step "Appended harness-powers block to $label."
+    }
+}
+
 # --- 1. git init --------------------------------------------------------------
 if (Test-Path (Join-Path $Directory '.git')) {
     Write-Step 'Git repository already present.'
@@ -116,26 +143,25 @@ Write-Step "$verb $created file(s) created, $skipped already present (skipped)."
 
 # --- 2b. Portable skills for non-Claude CLIs (Codex -> .codex, agy -> .agents) ---
 # Claude Code uses the harness-powers plugin skills; these vendored copies give
-# Codex and agy the same intake -> done procedures. Merge-safe.
+# Codex and agy the same intake -> done procedures. Overwritten on re-init so a new
+# plugin version refreshes them (harness-powers-owned, not your files).
 $portableSkills = Join-Path $root 'portable-skills'
 if (Test-Path $portableSkills) {
-    $skCreated = 0; $skSkipped = 0
+    $skN = 0
     Get-ChildItem $portableSkills -Directory | ForEach-Object {
         $name = $_.Name
         foreach ($base in @('.codex/skills', '.agents/skills')) {
             $dest = Join-Path $Directory (Join-Path $base $name)
-            if (Test-Path (Join-Path $dest 'SKILL.md')) {
-                $skSkipped++
-            } elseif ($DryRun) {
-                $skCreated++
+            if ($DryRun) {
+                $skN++
             } else {
                 New-Item -ItemType Directory -Force $dest | Out-Null
                 Copy-Item (Join-Path $_.FullName '*') $dest -Recurse -Force
-                $skCreated++
+                $skN++
             }
         }
     }
-    Write-Step "Portable skills: $skCreated copied, $skSkipped already present (.codex/skills + .agents/skills)."
+    Write-Step "Portable skills: $skN vendored/refreshed (.codex/skills + .agents/skills)."
 }
 
 # --- 3. harness-cli + database -------------------------------------------------
@@ -158,33 +184,11 @@ if ((-not (Test-Path $cli)) -and $DryRun) {
     Write-Step 'Initialized harness.db.'
 }
 
-# --- 4. CLAUDE.md pipeline block ------------------------------------------------
-$claudeMd = Join-Path $Directory 'CLAUDE.md'
-$existing = if (Test-Path $claudeMd) { Get-Content $claudeMd -Raw } else { '' }
-if ($existing -match 'HARNESS-POWERS:BEGIN') {
-    Write-Step 'CLAUDE.md already has the harness-powers block.'
-} elseif ($DryRun) {
-    Write-Step 'DRY RUN: would append harness-powers block to CLAUDE.md'
-} else {
-    $block = Get-Content (Join-Path $templates 'claude-md-block.md') -Raw
-    $sep = if ($existing -and -not $existing.EndsWith("`n")) { "`n`n" } elseif ($existing) { "`n" } else { '' }
-    Set-Content -Path $claudeMd -Value ($existing + $sep + $block) -NoNewline
-    Write-Step 'Appended harness-powers block to CLAUDE.md.'
-}
+# --- 4. CLAUDE.md pipeline block (refreshed in place on re-init) ----------------
+Upsert-Block (Join-Path $Directory 'CLAUDE.md') (Join-Path $templates 'claude-md-block.md') 'CLAUDE.md'
 
 # --- 4b. AGENTS.md pipeline block (Codex / agy / Grok read this; Claude does not) --
-$agentsMd = Join-Path $Directory 'AGENTS.md'
-$agentsExisting = if (Test-Path $agentsMd) { Get-Content $agentsMd -Raw } else { '' }
-if ($agentsExisting -match 'HARNESS-POWERS:BEGIN') {
-    Write-Step 'AGENTS.md already has the harness-powers block.'
-} elseif ($DryRun) {
-    Write-Step 'DRY RUN: would append harness-powers block to AGENTS.md'
-} else {
-    $agentsBlock = Get-Content (Join-Path $templates 'agents-md-block.md') -Raw
-    $sep = if ($agentsExisting -and -not $agentsExisting.EndsWith("`n")) { "`n`n" } elseif ($agentsExisting) { "`n" } else { '' }
-    Set-Content -Path $agentsMd -Value ($agentsExisting + $sep + $agentsBlock) -NoNewline
-    Write-Step 'Appended harness-powers block to AGENTS.md.'
-}
+Upsert-Block (Join-Path $Directory 'AGENTS.md') (Join-Path $templates 'agents-md-block.md') 'AGENTS.md'
 
 # --- 5. Lean trace profile note (covers pre-existing harness repos) --------------
 $traceSpec = Join-Path $Directory 'docs\TRACE_SPEC.md'
@@ -241,14 +245,12 @@ if (Test-Path $cli) {
 $gateSrc = Join-Path $root 'gate'
 if (Test-Path $gateSrc) {
     $gateBin = Join-Path $Directory '.harness-powers/bin/harness-powers-gate'
-    if (Test-Path $gateBin) {
-        Write-Step 'Gate script already present.'
-    } elseif ($DryRun) {
-        Write-Step 'DRY RUN: would install .harness-powers/bin/harness-powers-gate'
+    if ($DryRun) {
+        Write-Step 'DRY RUN: would install/refresh .harness-powers/bin/harness-powers-gate'
     } else {
         New-Item -ItemType Directory -Force (Split-Path $gateBin) | Out-Null
         Copy-Item (Join-Path $gateSrc 'harness-powers-gate') $gateBin -Force
-        Write-Step 'Installed .harness-powers/bin/harness-powers-gate.'
+        Write-Step 'Installed/refreshed .harness-powers/bin/harness-powers-gate.'
     }
 
     function Install-Hook($srcRel, $destRel, $label) {
