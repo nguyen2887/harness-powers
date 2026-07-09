@@ -18,7 +18,7 @@ Turn the current directory into a harness-powers-ready project in one pass.
 
    If `CLAUDE_PLUGIN_ROOT` is not set in your environment, locate the plugin root by finding this skill's own directory (the plugin root is two levels up from `skills/init/`).
 
-   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli` (vendored `.exe` on Windows; auto-downloaded per-platform from the pinned upstream release on macOS/Linux), creates `harness.db`, appends the pipeline block to `CLAUDE.md` (marker-guarded), ensures the lean trace profile note in `docs/TRACE_SPEC.md`, and registers `codex` (external-review) and `agy` (repo-explore) when present on PATH.
+   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli` (vendored `.exe` on Windows; auto-downloaded per-platform from the pinned upstream release on macOS/Linux), creates `harness.db`, appends the pipeline block to `CLAUDE.md` and a portable copy to `AGENTS.md` (both marker-guarded, so Codex/agy/Grok follow the same pipeline), ensures the lean trace profile note in `docs/TRACE_SPEC.md`, and registers `codex` (external-review) and `agy` (repo-explore) when present on PATH.
 
 2. **Read the script output.** Every line is prefixed `[harness-powers]`. Verify:
    - scaffold files created (or skipped as already present — fine on re-run)

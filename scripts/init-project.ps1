@@ -148,6 +148,20 @@ if ($existing -match 'HARNESS-POWERS:BEGIN') {
     Write-Step 'Appended harness-powers block to CLAUDE.md.'
 }
 
+# --- 4b. AGENTS.md pipeline block (Codex / agy / Grok read this; Claude does not) --
+$agentsMd = Join-Path $Directory 'AGENTS.md'
+$agentsExisting = if (Test-Path $agentsMd) { Get-Content $agentsMd -Raw } else { '' }
+if ($agentsExisting -match 'HARNESS-POWERS:BEGIN') {
+    Write-Step 'AGENTS.md already has the harness-powers block.'
+} elseif ($DryRun) {
+    Write-Step 'DRY RUN: would append harness-powers block to AGENTS.md'
+} else {
+    $agentsBlock = Get-Content (Join-Path $templates 'agents-md-block.md') -Raw
+    $sep = if ($agentsExisting -and -not $agentsExisting.EndsWith("`n")) { "`n`n" } elseif ($agentsExisting) { "`n" } else { '' }
+    Set-Content -Path $agentsMd -Value ($agentsExisting + $sep + $agentsBlock) -NoNewline
+    Write-Step 'Appended harness-powers block to AGENTS.md.'
+}
+
 # --- 5. Lean trace profile note (covers pre-existing harness repos) --------------
 $traceSpec = Join-Path $Directory 'docs\TRACE_SPEC.md'
 if (Test-Path $traceSpec) {

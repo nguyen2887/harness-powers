@@ -151,6 +151,17 @@ else
   step "Appended harness-powers block to CLAUDE.md."
 fi
 
+# --- 4b. AGENTS.md pipeline block (Codex / agy / Grok read this; Claude does not) ----
+AGENTS_MD="$DIRECTORY/AGENTS.md"
+if [ -f "$AGENTS_MD" ] && grep -q 'HARNESS-POWERS:BEGIN' "$AGENTS_MD"; then
+  step "AGENTS.md already has the harness-powers block."
+elif [ "$DRY_RUN" = "--dry-run" ]; then
+  step "DRY RUN: would append harness-powers block to AGENTS.md"
+else
+  { [ -f "$AGENTS_MD" ] && [ -s "$AGENTS_MD" ] && echo ""; cat "$TEMPLATES/agents-md-block.md"; } >> "$AGENTS_MD"
+  step "Appended harness-powers block to AGENTS.md."
+fi
+
 # --- 5. Lean trace profile note ------------------------------------------------------
 TRACE_SPEC="$DIRECTORY/docs/TRACE_SPEC.md"
 if [ -f "$TRACE_SPEC" ]; then

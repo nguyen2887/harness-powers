@@ -85,7 +85,9 @@ mkdir my-project && cd my-project && claude
    pinned upstream release (checksum-verified); the vendored `.exe` covers
    Windows. Then runs `harness-cli init` to create `harness.db`.
 3. Appends the pipeline block to `CLAUDE.md` (marker-guarded) — this is what
-   makes the pipeline auto-trigger and tells Superpowers to stand down.
+   makes the pipeline auto-trigger and tells Superpowers to stand down — and a
+   portable copy to `AGENTS.md` so non-Claude CLIs (Codex, agy, Grok) follow the
+   same intake → done pipeline and gates.
 4. Ensures the lean-trace override note in `docs/TRACE_SPEC.md`.
 5. Registers `codex` (capability `external-review`) and `agy` (capability
    `repo-explore`) in the harness tool registry when those CLIs are on PATH,
