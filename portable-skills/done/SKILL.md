@@ -24,8 +24,8 @@ NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION OUTPUT
    - No verify command configured (some tiny work): run the project's relevant checks directly and quote the output.
    - Verification fails → the task is NOT done. Trivial fix → fix and re-verify. Anything else → continue with the **debugging** skill, then return here.
 
-2. **Code-review gate** — the diff is reviewed by a **separate reviewer session, not a sub-invocation**.
-   - **Hand off to the reviewer.** Give a review pane on a different, skeptical model (e.g. Codex/GPT, run read-only) a packet built from evidence you already gathered:
+2. **Code-review gate** — the diff is reviewed in a **separate, human-driven reviewer pane, never a sub-invocation you launch**.
+   - **Hand off to the reviewer — do NOT run it yourself.** Do NOT spawn, `exec`, or open a Task/sub-agent to review; PAUSE and give your human — to route to their reviewer pane (e.g. a Codex/GPT terminal, read-only) — a packet built from evidence you already gathered:
      - Story/spec path and any relevant acceptance criteria.
      - Fresh verification command and output from step 1.
      - `git status --short`.

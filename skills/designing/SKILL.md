@@ -39,9 +39,9 @@ Plans assume the implementer has zero context: name the files to touch per task,
 
 ## Plan-Review Gate
 
-The plan is reviewed by a **separate reviewer session, not a sub-invocation** — you hand the plan to a reviewer, then record the outcome. A `PreToolUse` hard gate blocks code edits until that approval is recorded.
+The plan is reviewed in a **separate, human-driven reviewer pane — never a sub-invocation you launch**. You pause and hand off; your human runs the reviewer; you record the outcome. A `PreToolUse` hard gate blocks code edits until that approval is recorded.
 
-1. **Hand off to the reviewer.** Give the plan artifacts (`<story/design/execplan paths>`) to a review pane on a different, skeptical model (e.g. Codex/GPT, run read-only). Ask it to review as a senior engineer and flag: missing requirements, contradictions, untestable acceptance criteria, hidden risks, wrong sequencing, scope creep — each as Critical / Important / Minor with a concrete reason, no praise.
+1. **Hand off to the reviewer — do NOT run it yourself.** The reviewer lives in a separate pane your human drives (e.g. a Codex/GPT terminal, read-only). Do NOT spawn, `exec`, or open a Task/sub-agent to review — that pane is sandboxed and routing the review is the human's job. PAUSE, hand your human the plan artifact paths (`<story/design/execplan paths>`), and ask them to have the reviewer flag, as a senior engineer: missing requirements, contradictions, untestable acceptance criteria, hidden risks, wrong sequencing, scope creep — each as Critical / Important / Minor with a concrete reason, no praise. Wait for the verdict before continuing.
    - *Solo (no review pane handy)?* Do one honest self-review pass with fresh eyes (placeholder scan, internal contradictions, ambiguity, scope check, verify-command check); note `external-review: inactive`.
 2. **Triage** — verify each finding technically before acting. No performative agreement, no blind changes. Critical/Important → fix the design, then re-review. Minor → fix, or reject with a one-line technical reason.
 3. **Stop rule** — loop until a round yields zero NEW Critical/Important findings. 2-3 rounds is normal. More than 4 → stop and escalate to your human partner; the design likely has a structural problem.

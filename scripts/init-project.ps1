@@ -164,6 +164,21 @@ if (Test-Path $portableSkills) {
     Write-Step "Portable skills: $skN vendored/refreshed (.codex/skills + .agents/skills)."
 }
 
+# --- 2c. Remove legacy harness-powers.toml -------------------------------------
+# Older installs vendored a harness-powers.toml of "model hints"; its comments
+# described the retired auto-invoke gates and some CLIs obeyed them, auto-spawning a
+# reviewer. Reviewer/explorer model is now the human's per-pane choice, so the file
+# is obsolete. Delete OUR copy (identified by its header); leave unrelated files.
+$legacyToml = Join-Path $Directory 'harness-powers.toml'
+if ((Test-Path $legacyToml) -and ((Get-Content $legacyToml -TotalCount 3) -match 'harness-powers')) {
+    if ($DryRun) {
+        Write-Step 'DRY RUN: would remove legacy harness-powers.toml (obsolete model-hints file).'
+    } else {
+        Remove-Item -Force $legacyToml
+        Write-Step 'Removed legacy harness-powers.toml (obsolete; reviewer/explorer model is now a per-pane human choice).'
+    }
+}
+
 # --- 3. harness-cli + database -------------------------------------------------
 Ensure-CliBinary
 $cli = Join-Path $Directory 'scripts\bin\harness-cli.exe'

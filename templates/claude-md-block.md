@@ -15,6 +15,4 @@ Pipeline:
 Precedence: in this repo, harness-powers REPLACES the Superpowers process skills. Do NOT invoke: superpowers:brainstorming, superpowers:writing-plans, superpowers:executing-plans, superpowers:subagent-driven-development, superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion, superpowers:requesting-code-review, superpowers:finishing-a-development-branch. Superpowers utility skills (superpowers:using-git-worktrees, superpowers:dispatching-parallel-agents) remain available.
 
 Trace profile: LEAN — Minimal/Standard tiers only; the Detailed tier in `docs/TRACE_SPEC.md` is retired here. Low `score-trace` values are expected and are not a quality problem.
-
-External tool tuning (review/explore model, reasoning effort): `harness-powers.toml` at the repo root.
 <!-- HARNESS-POWERS:END -->

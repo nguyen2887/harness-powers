@@ -3,7 +3,7 @@
 # harness-powers pipeline. Idempotent. Re-running REFRESHES harness-powers-owned
 # artifacts (pipeline blocks between markers, vendored skills, the gate script) so
 # a new plugin version lands without deleting anything by hand; your own files
-# (code, docs, harness-powers.toml, hook JSON, harness.db, and anything outside the
+# (code, docs, hook JSON, harness.db, and anything outside the
 # markers) are never overwritten. Mirror of init-project.ps1.
 set -euo pipefail
 
@@ -175,6 +175,22 @@ if [ -d "$PORTABLE_SKILLS" ]; then
     done
   done
   step "Portable skills: $sk_n vendored/refreshed (.codex/skills + .agents/skills)."
+fi
+
+# --- 2c. Remove legacy harness-powers.toml -------------------------------------
+# Older installs vendored a harness-powers.toml of "model hints"; its comments
+# described the retired auto-invoke gates, and some CLIs read those comments as
+# instructions and auto-spawned a reviewer. Reviewer/explorer model is now the
+# human's per-pane choice, so the file is obsolete. Delete OUR copy (identified by
+# its header) on re-init; leave any unrelated same-named file alone.
+legacy_toml="$DIRECTORY/harness-powers.toml"
+if [ -f "$legacy_toml" ] && head -n 3 "$legacy_toml" | grep -q 'harness-powers'; then
+  if [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would remove legacy harness-powers.toml (obsolete model-hints file)."
+  else
+    rm -f "$legacy_toml"
+    step "Removed legacy harness-powers.toml (obsolete; reviewer/explorer model is now a per-pane human choice)."
+  fi
 fi
 
 # --- 3. harness-cli + database ---------------------------------------------------

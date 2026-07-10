@@ -23,10 +23,13 @@ Pipeline — one entry, one exit:
 ### Mandatory gates — do NOT skip, even when the work feels simple
 
 1. **Plan-review gate** — normal/high-risk lane, after design, before writing code.
-   Hand the plan to a reviewer pane on a different model (e.g. Codex/GPT, read-only);
-   fix Critical/Important findings, loop until a round adds none. No review pane? One
-   honest self-review pass; note `external-review: inactive`. Then **record the
-   approval** to unlock code edits (you record it, not the reviewer):
+   The reviewer is a SEPARATE human-driven pane (e.g. a Codex/GPT terminal, read-only),
+   NOT something you launch: do NOT spawn, `exec`, or open a Task/sub-agent to review.
+   PAUSE, hand your human the plan and the artifact paths, and wait for their verdict;
+   then fix Critical/Important findings and loop until a round adds none. Only if you
+   are truly running solo with no second pane: one honest self-review pass; note
+   `external-review: inactive`. Then **record the approval** to unlock code edits (you
+   record it, not the reviewer):
    `harness-cli intervention add --story <id> --type approval --source reviewer
    --description "plan-review passed: <summary>"`. Skipping this gate is a process
    violation, not a shortcut.
@@ -35,8 +38,9 @@ Pipeline — one entry, one exit:
    open normal/high-risk story has no reviewer approval. If an edit is blocked, you
    skipped the review — run it and record the approval above.
 
-2. **Code-review gate** — inside done, before ANY completion claim. Hand the diff to
-   a reviewer pane (same as above), loop over its findings, then record the approval.
+2. **Code-review gate** — inside done, before ANY completion claim. Same rule: hand the
+   diff to your human's reviewer pane (do NOT launch a reviewer yourself), loop over its
+   findings, then record the approval.
    No "done" / "it works" / "fixed" / "passing" claim is allowed outside the done
    gate, and none without fresh verification output pasted as evidence.
 
@@ -53,7 +57,4 @@ from here plus `docs/`.
 
 Before starting work, run `harness-cli query matrix` to see current
 behavior-to-proof status (this also lets a fresh CLI resume mid-project).
-
-Model hints for the reviewer/explorer pane (which model to run, reasoning effort):
-`harness-powers.toml` at the repo root.
 <!-- HARNESS-POWERS:END -->

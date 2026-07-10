@@ -40,15 +40,12 @@ Key choices:
 - **Lean trace profile.** Minimal/Standard tiers only; the Detailed tier is
   retired (the installer patches `docs/TRACE_SPEC.md` accordingly).
 - **Cross-model review gates.** Plan review after designing, code review before
-  done — each handed to a **separate reviewer session** on a skeptical model (e.g.
-  GPT via Codex, run read-only), not a sub-invocation. The orchestrator records the
+  done — each handed to a **separate, human-driven reviewer pane** on a skeptical
+  model (e.g. GPT via Codex, run read-only); you pause and hand it off, you never
+  launch the reviewer yourself. The orchestrator records the
   reviewer's `approval` intervention in `harness.db` (that is what releases the hard
   gate); the reviewer never writes Harness state. No reviewer handy = a self-review
   pass instead.
-- **Per-repo model tuning.** `harness-powers.toml` at the target repo root
-  (committed, installed by init) hints which model, reasoning effort, and sandbox to
-  run in the reviewer/explorer pane. Missing keys fall back to each CLI's own
-  defaults.
 - **Review stop rule.** Fix Critical/Important, reject Minor with reasons; loop
   until a round adds no new Critical/Important; escalate past 4 rounds. LLM
   reviewers never say "no issues" unprompted — the stop rule keeps the loop
@@ -93,7 +90,7 @@ mkdir my-project && cd my-project && claude
 and the gate script), so a plugin upgrade lands without deleting anything by hand;
 your own files are never overwritten. It:
 
-1. `git init` if needed, then copies the vendored scaffold (35 files: AGENTS.md,
+1. `git init` if needed, then copies the vendored scaffold (34 files: AGENTS.md,
    docs/, templates, SQL schema, vendored `harness-cli.exe`).
 2. On macOS/Linux, auto-downloads the matching `harness-cli` binary from the
    pinned upstream release (checksum-verified); the vendored `.exe` covers

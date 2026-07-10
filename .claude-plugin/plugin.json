@@ -1,7 +1,7 @@
 {
   "name": "harness-powers",
   "description": "Self-contained lean process pipeline with a vendored repository-harness scaffold: /harness-powers:init bootstraps any project, then intake -> designing -> implementing -> done, plus systematic debugging and external cross-model review gates. Runs on Claude Code, Codex, Antigravity/agy, and Grok via AGENTS.md + vendored skills + a PreToolUse hard gate.",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "author": {
     "name": "nguyen tran"
   }
