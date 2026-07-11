@@ -1,54 +1,35 @@
 ---
 name: work
-description: Use when the human invokes /work, says work with a task, starts a new Harness task, or resumes an existing task id. Resolve durable mailbox state, infer the required role and stage, claim it, execute the matching internal procedure, persist the handoff, and stop at the next boundary. Never require the human to name a role or copy a handoff packet.
+description: Use when the human invokes /work, says work with a task, starts a new Harness task, or resumes an existing task id. Resolve durable mailbox state, infer roles and stages, claim work, auto-chain safe consecutive stages, persist artifacts, and stop only at a role, review, human, blocker, or safety boundary. Never require the human to name a role or copy a handoff packet.
 ---
 
 # Work Resolver
 
-`work` is the only normal entrypoint. The human supplies a new task description
-or an existing task id; Harness resolves everything else.
-
-**Announce at start:** "Resolving Harness task state and next stage."
+The human supplies a description or task id. Resolve everything else.
 
 ## Runtime
 
-Use `.harness-powers/bin/harness-powers-workflow` as `workflow`. If it is missing,
-ask the human to re-run harness-powers init. Call `workflow actor` once and reuse
-that exact actor id for every mailbox command in this invocation.
+Use `.harness-powers/bin/harness-powers-workflow` as `workflow`. Call
+`workflow actor` once and reuse that actor id for the entire invocation.
 
-## Resolve or Create
+For a new description, follow `intake`, create `I-<intake-id>`, and execute its
+`context` stage. For an existing id, begin from `workflow show <task-id>`. A
+missing id matching `I-<number>` is an error, not a new description.
 
-- If the argument resolves with `workflow show <task-id>`, resume it.
-- Otherwise treat the full argument as a new task description:
-  1. Follow the sibling `intake` skill completely.
-  2. Capture its printed intake id and lane.
-  3. Create task id `I-<intake-id>` with
-     `workflow create I-<id> <lane> <id> "<summary>"`.
-  4. Continue into the new task's `context` stage in this invocation.
+## Execution Loop
 
-Do not ask the human for a role. `workflow show` returns `required_role`.
+For each stage:
 
-## Claim
+1. Show state and capture `stage`, `required_role`, `review_policy`, and latest artifact.
+2. Claim it with `workflow claim <task> <actor>`.
+3. For review authored by this actor, require another session or explicit
+   degraded self-review before retrying with `--allow-self`.
+4. Create a mailbox artifact and execute the mapped internal skill.
+5. Increment stage/debug counters and run
+   `workflow next-action <task> <previous-stage> <previous-role> <stages-run> <debug-runs>`.
+   Obey its `continue` or `stop` result.
 
-Run `workflow claim <task-id> <actor-id>`.
-
-- Existing live claim: report its owner/expiry and stop.
-- Review artifact authored by this actor: ask the human to run `work <task-id>`
-  in another session, or explicitly approve degraded self-review. Only after an
-  explicit answer may you retry with `--allow-self`.
-- `human-freeze`: stop and ask for `/approve <task-id>`.
-
-Renew the lease with `workflow renew <task-id> <actor-id>` before a long-running
-command and periodically during long stages. If execution stops before advance,
-release the claim unless preserving it is necessary to prevent conflicting writes.
-
-## Dispatch
-
-Read the sibling stage skill and follow it, passing the task id, actor id,
-current mailbox state, and an artifact path created with
-`workflow artifact <task-id> <actor-id> <stage-label>`.
-
-| Mailbox stage | Internal skill |
+| Stage | Internal skill |
 | --- | --- |
 | context | `context` |
 | contract, freeze | `designing` |
@@ -58,7 +39,37 @@ current mailbox state, and an artifact path created with
 | debugging | `debugging` |
 | close | `done` |
 
-The internal skill writes its result to the mailbox artifact and calls
-`workflow advance`. Never print a packet for the human to copy. At the next
-boundary, report only the task id, stage status, and whether the next invocation
-may use this session or should use an independent session.
+## Continue Automatically
+
+`next-action` continues in the same invocation when either condition holds:
+
+- the next stage has the same required role; or
+- the transition is `verify -> close` for tiny mechanical work or
+  `reconcile -> close` after approved code review.
+
+Typical chains are:
+
+- `prepare -> verify`;
+- `verify -> debugging -> verify`;
+- `reconcile -> verify`;
+- `verify -> close -> closed` for tiny mechanical work;
+- `reconcile -> close -> closed` after approved review.
+
+Internal stages still write separate artifacts and transitions. Auto-chaining
+changes human interaction, not audit granularity.
+
+## Stop Boundaries
+
+Stop and report the task id plus next stage when:
+
+- required role changes, except the safe close transitions above;
+- next stage is `plan-review`, `code-review`, or `human-freeze`;
+- the task is `closed`;
+- evidence requires human clarification or external authorization;
+- another actor owns the claim;
+- a baseline or environment blocker prevents safe progress;
+- six stages or two debugging cycles ran in this invocation.
+
+Renew the lease before long commands. If execution aborts before advance,
+release the claim unless holding it is necessary to prevent conflicting writes.
+Never ask the human to copy a packet or manually invoke the next same-role stage.

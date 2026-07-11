@@ -58,13 +58,29 @@ artifacts under `.harness-powers/runtime/tasks/`. Each `work` invocation:
 1. resolves or creates the task;
 2. claims its current stage with a lease;
 3. infers the required role from durable state;
-4. writes the stage result to the mailbox;
-5. advances exactly one boundary and releases the claim.
+4. writes a separate result for each stage;
+5. auto-chains safe same-role stages until a real execution boundary.
 
 This removes manual copy/paste between panes. One session can run the whole flow,
 or multiple sessions can take successive claims. Plan and code review prefer a
 session independent from the artifact author. Explicit self-review is supported
 only as a recorded degraded-independence mode.
+
+The durable machine remains granular, but one invocation commonly executes:
+
+```text
+prepare -> build -> verify
+verify failure -> debugging -> verify
+reconcile -> verify
+reconcile approved -> close -> closed
+```
+
+It stops for a role change, independent review, human freeze, blocker,
+clarification, or safety budget. Build runs targeted inner-loop checks; verify
+runs final acceptance and broader checks once.
+
+Tiny mechanical work with no executable behavior change or risk flags may use
+`verify -> close`. Tiny runtime/config changes still require code review.
 
 ## Enforcement
 

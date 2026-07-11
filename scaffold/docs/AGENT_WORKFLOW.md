@@ -23,7 +23,8 @@ topology and require an explicitly shared Harness control plane.
 
 - One actor claims one stage at a time and renews its lease during long work.
 - A completed stage persists its artifact and releases the claim.
-- The next `work <task-id>` reads durable state and resolves the required role.
+- The active `work` invocation immediately reclaims and continues consecutive
+  same-role stages; otherwise the next invocation resumes durable state.
 - Product-code writes remain single-writer per task.
 - Plan and code review should use a session independent of the artifact author.
   Explicit self-review is a visible degraded mode, never an invisible fallback.
@@ -51,6 +52,7 @@ prepare -> verify -> code-review -> reconcile -> close -> closed
               |                         |
               +---- debugging <---------+
 debugging -> verify | contract/design escalation
+tiny mechanical: verify -> close
 ```
 
 Tiny work may go `context -> prepare`. Normal and high-risk work require the
@@ -58,12 +60,36 @@ contract, plan-review, freeze, and explicit human-freeze path. Contract, design,
 and plan may share one story artifact; the boundaries remain independently
 reviewable.
 
+## Execution Boundaries
+
+Mailbox stages stay granular, but human interaction follows role boundaries.
+One `work` invocation auto-chains consecutive stages when the required role is
+unchanged. It also auto-chains the safe completion transitions
+`verify -> close` for tiny mechanical work and `reconcile -> close` after an
+approved code review.
+
+Stop for a role change, plan/code review, human freeze, blocker, clarification,
+closed task, six executed stages, or two debugging cycles. Auto-chaining never
+collapses artifacts or bypasses a review/human gate.
+
+During build, run targeted Red/Green checks only. `verify` runs the official
+acceptance and broader checks once against the final working tree.
+
+Every task defaults to `review_policy: required`. Context may set
+`skip-mechanical` only when all are true: lane is tiny, no executable behavior
+changes, no risk flag exists, and deterministic mechanical proof is sufficient.
+Runtime-affecting config always requires review.
+
 ## Mailbox Contract
 
 The installed `.harness-powers/bin/harness-powers-workflow` helper owns task
 state, claims, and transitions. Each task stores its lane, intake/story ids,
-current stage, required role, latest artifact, artifact author, reviewer actor,
-review independence, and append-only handoff artifacts.
+current stage, required role, review policy, latest artifact, artifact author,
+reviewer actor, review independence, and append-only handoff artifacts.
+
+After every transition, the resolver calls `next-action`; this deterministic
+helper enforces same-role continuation, safe-close exceptions, review/human
+boundaries, and stage/debug budgets.
 
 An actor must:
 
@@ -103,7 +129,9 @@ These prefixes are machine-enforced stage identifiers, not decorative prose.
 
 ## Completion
 
-Only `close` may claim completion, and only with fresh passing verification, an
-approved code-review verdict, resolved findings, and durable Harness records.
+Only `close` may claim completion. It always requires fresh passing verification
+and durable Harness records; required-review tasks also need an approved
+code-review verdict and resolved findings. A `skip-mechanical` task instead needs
+durable proof that the narrow exception remains valid.
 Merge, push, PR creation, deployment, and other external actions remain separate
 human decisions.

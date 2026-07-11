@@ -1,7 +1,7 @@
 {
   "name": "harness-powers",
-  "description": "Topology-agnostic Harness workflow with task-oriented work/approve entrypoints, durable shared mailboxes, role-based stage claims, independent review, and a machine-enforced plan gate.",
-  "version": "0.6.0",
+  "description": "Topology-agnostic Harness workflow with work/approve entrypoints, durable shared mailboxes, role-boundary auto-chaining, adaptive review policy, and machine-enforced gates.",
+  "version": "0.7.0",
   "author": {
     "name": "nguyen tran"
   }

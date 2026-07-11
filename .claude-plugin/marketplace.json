@@ -7,7 +7,7 @@
     {
       "name": "harness-powers",
       "source": "./",
-      "description": "Role-based Harness workflow with durable work/approve task routing, shared mailboxes, review independence, and machine-enforced gates."
+      "description": "Role-based Harness workflow with durable work/approve routing, shared mailboxes, role-boundary auto-chaining, adaptive review, and machine-enforced gates."
     }
   ]
 }

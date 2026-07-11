@@ -33,13 +33,16 @@ For every behavior, use Red -> Green -> Refactor:
 
 1. Write the smallest failing test and observe the intended failure.
 2. Write the minimum production change.
-3. Run the targeted test and relevant suite.
+3. Run only the targeted test needed for the inner Red/Green loop.
 4. Refactor while green and commit at coherent checkpoints.
 
-Pure docs/config/copy work may use the relevant check instead of a new test.
+Pure docs/config/copy work may use the relevant deterministic check instead of a new test.
 Follow the frozen plan in order. Record proof flags only for checks actually run
 and observed passing. Stop when reality contradicts the plan or requires a new
 design decision.
+
+Do not run the full acceptance or broader suite here. The separate `verify`
+stage runs those once against the final working tree.
 
 When the build meets the frozen criteria, write base commit, changed paths,
 story path, tests, and verify command to the supplied mailbox artifact, then run:
@@ -66,4 +69,5 @@ When a code-review verdict returns:
    - write the final verdict and resolutions to the artifact;
    - run `workflow advance <task> <actor> reconcile close closer <artifact>`.
 
-Report only the task id and next stage. Never print a handoff for the human to copy.
+Return control to the `work` resolver after advance. It auto-chains verify or
+close when safe. Never print a handoff for the human to copy.

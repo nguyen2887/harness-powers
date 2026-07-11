@@ -44,5 +44,6 @@ Advance using the current mailbox stage:
 - plan: `workflow advance <task> <actor> plan-review freeze design-authority <artifact>`
 - code: `workflow advance <task> <actor> code-review reconcile implementation-worker <artifact>`
 
-Then stop. Report only the task id, verdict, and that `work <task>` may resume;
-the artifact owner reads the verdict from the mailbox.
+Return control to the `work` resolver. It stops at the role boundary and reports
+only the task id, verdict, and that `work <task>` may resume; the artifact owner
+reads the verdict from the mailbox.

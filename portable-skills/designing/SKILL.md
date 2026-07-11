@@ -50,8 +50,9 @@ story id with `workflow set-story <task> <story-id>`, then run:
 
 `workflow advance <task> <actor> contract plan-review technical-reviewer <artifact>`.
 
-Report that an independent invocation of `work <task>` is preferred. Do not
-print the plan or packet for the human to copy.
+Return control to the `work` resolver; it stops at the review boundary and
+reports that an independent invocation is preferred. Do not print the plan or
+packet for the human to copy.
 
 ## Reconcile and Freeze
 
@@ -68,4 +69,5 @@ When the verdict returns:
    findings, write the frozen plan,
    reviewer verdict, residual Minor findings, and verify command to the supplied
    artifact; run `workflow advance <task> <actor> freeze human-freeze human <artifact>`.
-5. Ask the human for `/approve <task>`. Never infer approval from ordinary chat.
+5. Return control to the `work` resolver. At `human-freeze` it asks the human for
+   `/approve <task>`. Never infer approval from ordinary chat.

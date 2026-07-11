@@ -16,6 +16,7 @@ find_repo() {
 REPO="$(find_repo)"
 RUNTIME="${HARNESS_POWERS_RUNTIME:-$REPO/.harness-powers/runtime}"
 LEASE_SECONDS="${HARNESS_POWERS_LEASE_SECONDS:-1800}"
+APPROVAL_LOCK=""
 mkdir -p "$RUNTIME/tasks"
 
 validate_id() {
@@ -63,6 +64,7 @@ require_transition() {
     contract:plan-review:technical-reviewer|plan-review:freeze:design-authority|\
     freeze:plan-review:technical-reviewer|freeze:human-freeze:human|\
     prepare:verify:implementation-worker|verify:code-review:technical-reviewer|\
+    verify:close:closer|\
     verify:debugging:implementation-worker|debugging:verify:implementation-worker|\
     debugging:contract:design-authority|code-review:reconcile:implementation-worker|\
     reconcile:verify:implementation-worker|reconcile:contract:design-authority|\
@@ -84,6 +86,7 @@ cmd_create() {
   write_field "$task" stage context
   write_field "$task" status ready
   write_field "$task" required_role context-worker
+  write_field "$task" review_policy required
   write_field "$task" latest_artifact ""
   write_field "$task" artifact_author ""
   write_field "$task" reviewer_actor ""
@@ -100,7 +103,7 @@ cmd_show() {
   [ -f "$d/owner" ] && owner="$(sed -n '1p' "$d/owner")"
   [ -f "$d/expires" ] && expires="$(sed -n '1p' "$d/expires")"
   printf 'task_id: %s\n' "$task"
-  for f in lane intake_id story_id stage status required_role latest_artifact artifact_author reviewer_actor review_independence summary; do
+  for f in lane intake_id story_id stage status required_role review_policy latest_artifact artifact_author reviewer_actor review_independence summary; do
     printf '%s: %s\n' "$f" "$(read_field "$task" "$f")"
   done
   printf 'claimed_by: %s\nclaim_expires: %s\n' "$owner" "$expires"
@@ -173,6 +176,10 @@ cmd_advance() {
   require_task "$task"; current="$(read_field "$task" stage)"
   [ "$current" = "$expected" ] || die "stage changed: expected '$expected', found '$current'"
   require_transition "$expected" "$next" "$role"
+  if [ "$expected:$next" = verify:close ]; then
+    [ "$(read_field "$task" review_policy)" = skip-mechanical ] || \
+      die "verify may skip code review only for a tiny mechanical task"
+  fi
   d="$(claim_dir "$task")"; owner="$(sed -n '1p' "$d/owner" 2>/dev/null || true)"
   [ "$owner" = "$actor" ] || die "actor '$actor' does not hold the task claim"
   case "$artifact" in
@@ -197,12 +204,48 @@ cmd_set_story() {
   require_task "$1"; validate_id "$2"; write_field "$1" story_id "$2"
 }
 
+cmd_set_review_policy() {
+  [ "$#" -eq 3 ] || die "usage: set-review-policy <task-id> <actor-id> <required|skip-mechanical>"
+  local task="$1" actor="$2" policy="$3" d owner stage lane
+  require_task "$task"
+  case "$policy" in required|skip-mechanical) ;; *) die "invalid review policy '$policy'" ;; esac
+  d="$(claim_dir "$task")"; owner="$(sed -n '1p' "$d/owner" 2>/dev/null || true)"
+  [ "$owner" = "$actor" ] || die "actor '$actor' does not hold the task claim"
+  stage="$(read_field "$task" stage)"; [ "$stage" = context ] || die "review policy is decided during context"
+  lane="$(read_field "$task" lane)"
+  if [ "$policy" = skip-mechanical ] && [ "$lane" != tiny ]; then
+    die "only tiny tasks may skip independent code review"
+  fi
+  write_field "$task" review_policy "$policy"
+}
+
+cmd_next_action() {
+  [ "$#" -eq 5 ] || die "usage: next-action <task-id> <previous-stage> <previous-role> <stages-run> <debug-runs>"
+  local task="$1" previous_stage="$2" previous_role="$3" stages_run="$4" debug_runs="$5"
+  local stage role action=stop reason=role-boundary
+  require_task "$task"
+  case "$stages_run" in ""|*[!0-9]*) die "stage counter must be numeric" ;; esac
+  case "$debug_runs" in ""|*[!0-9]*) die "debug counter must be numeric" ;; esac
+  stage="$(read_field "$task" stage)"; role="$(read_field "$task" required_role)"
+  if [ "$stage" = closed ]; then reason=closed
+  elif [ "$stage" = human-freeze ]; then reason=human-boundary
+  elif [ "$stage" = plan-review ] || [ "$stage" = code-review ]; then reason=review-boundary
+  elif [ "$stages_run" -ge 6 ]; then reason=stage-budget
+  elif [ "$debug_runs" -ge 2 ]; then reason=debug-budget
+  elif [ "$role" = "$previous_role" ]; then action=continue; reason=same-role
+  elif { [ "$previous_stage" = verify ] || [ "$previous_stage" = reconcile ]; } && [ "$stage" = close ]; then
+    action=continue; reason=safe-close
+  fi
+  printf 'action: %s\nreason: %s\nstage: %s\nrequired_role: %s\n' "$action" "$reason" "$stage" "$role"
+}
+
 cmd_approve() {
   [ "$#" -eq 1 ] || die "usage: approve <task-id>"
   local task="$1" stage lock
   require_task "$task"; lock="$(task_dir "$task")/approve-lock"
   mkdir "$lock" 2>/dev/null || die "approval for task '$task' is already in progress"
-  trap 'rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
+  APPROVAL_LOCK="$lock"
+  trap 'if [ -n "${APPROVAL_LOCK:-}" ]; then rmdir "$APPROVAL_LOCK" 2>/dev/null || true; fi' EXIT INT TERM
   stage="$(read_field "$task" stage)"
   if [ "$stage" != "human-freeze" ]; then
     rmdir "$lock"
@@ -213,6 +256,7 @@ cmd_approve() {
   write_field "$task" status ready
   rm -rf "$(claim_dir "$task")"
   rmdir "$lock"
+  APPROVAL_LOCK=""
   printf 'task_id: %s\nstage: prepare\nrequired_role: implementation-worker\n' "$task"
 }
 
@@ -241,7 +285,7 @@ cmd_list() {
   done
 }
 
-cmd="${1:-}"; [ -n "$cmd" ] || die "commands: actor create show claim renew artifact advance set-story approve release list"
+cmd="${1:-}"; [ -n "$cmd" ] || die "commands: actor create show claim renew artifact advance set-story set-review-policy next-action approve release list"
 shift || true
 case "$cmd" in
   actor) actor_id ;;
@@ -252,6 +296,8 @@ case "$cmd" in
   artifact) cmd_artifact "$@" ;;
   advance) cmd_advance "$@" ;;
   set-story) cmd_set_story "$@" ;;
+  set-review-policy) cmd_set_review_policy "$@" ;;
+  next-action) cmd_next_action "$@" ;;
   approve) cmd_approve "$@" ;;
   release) cmd_release "$@" ;;
   list) cmd_list "$@" ;;

@@ -40,10 +40,11 @@ Messages beginning with `/approve` or `approve` MUST use the `approve` skill.
 The human supplies a description or task id, never a role, model, provider, pane,
 or stage. Resolve those from `.harness-powers/runtime/tasks/`.
 
-Every change starts with intake. Each invocation claims and executes only the
-current stage, persists its artifact in the shared mailbox, advances one
-boundary, and stops. Never ask the human to copy a handoff or launch another CLI,
-pane, Task, or sub-agent as an implicit workflow transition.
+Every change starts with intake. Each invocation persists a separate artifact
+for every stage, but auto-chains consecutive same-role stages. Stop only for a
+role/review/human boundary, blocker, clarification, closed task, or safety
+budget. Never ask the human to invoke the next same-role stage, copy a handoff,
+or launch another CLI, pane, Task, or sub-agent as an implicit transition.
 
 Roles are `context-worker`, `design-authority`, `implementation-worker`,
 `technical-reviewer`, `closer`, and `human`. They are capability contracts, not
@@ -54,6 +55,11 @@ artifact author; explicit self-review must be recorded as degraded independence.
 Only close may claim completion. Code edits for normal/high-risk stories remain
 blocked until the explicit human freeze records a reviewer approval beginning
 `plan-review passed:`. Code approval separately begins `code-review passed:`.
+
+Build runs targeted inner-loop checks. Verify runs final acceptance and broader
+checks. Tiny mechanical work may use `review_policy: skip-mechanical` only when
+it changes no executable behavior and has no risk flags; all other work requires
+independent code review.
 
 Detailed procedures live in the installed skills. If this runtime does not
 support slash or skill invocation, plain `work <description-or-task-id>` and

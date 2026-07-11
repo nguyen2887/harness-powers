@@ -14,10 +14,14 @@ Use the task id, actor id, story id, and mailbox artifact path supplied by the
    story validation table; record proof flags only for layers observed passing.
 3. Gather `git status --short`, base commit, diff stat, diff, exact commands, and
    exact outcomes in the supplied mailbox artifact.
-4. On success, run:
-   `workflow advance <task> <actor> verify code-review technical-reviewer <artifact>`.
+4. On success, inspect `review_policy`:
+   - `skip-mechanical`: run
+     `workflow advance <task> <actor> verify close closer <artifact>`;
+   - otherwise run
+     `workflow advance <task> <actor> verify code-review technical-reviewer <artifact>`.
 5. On failure, include the full failure and reproduction in the artifact, then run:
    `workflow advance <task> <actor> verify debugging implementation-worker <artifact>`.
 
-After reconciliation changes code, repeat verification with fresh output. Report
-only the task id and next stage; never print a packet for the human to copy.
+After reconciliation changes code, repeat verification with fresh output. Return
+control to the `work` resolver; it decides whether to continue or stop. Never
+print a packet for the human to copy.
