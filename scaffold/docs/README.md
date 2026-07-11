@@ -6,6 +6,7 @@ user-provided spec.
 ## Main Files
 
 - `HARNESS.md`: how humans and agents collaborate.
+- `AGENT_WORKFLOW.md`: public work/approve interface, durable stage machine, role contracts, mailbox, and review independence.
 - `FEATURE_INTAKE.md`: how prompts become tiny, normal, or high-risk work.
 - `ARCHITECTURE.md`: architecture discovery and boundary rules.
 - `TOOL_REGISTRY.md`: how external tools are registered and looked up.

@@ -2,7 +2,8 @@
 # harness-powers hard gate (PreToolUse hook for Claude Code, Codex, and Grok).
 #
 # Blocks edits to code until the plan-review gate has been recorded for every
-# OPEN normal/high-risk story — i.e. a reviewer 'approval' intervention exists.
+# OPEN normal/high-risk story — i.e. a stage-specific reviewer approval whose
+# description starts with 'plan-review passed:' exists.
 # The signal is objective harness.db state, not something the model must remember.
 #
 # Fail-open by design: any uncertainty (no harness.db, no CLI, unparseable input,
@@ -57,7 +58,7 @@ cli="$repo/scripts/bin/harness-cli"
 [ -x "$cli" ] || cli="$repo/scripts/bin/harness-cli.exe"
 [ -x "$cli" ] || exit 0
 
-sql_open="SELECT group_concat(s.id, ', ') FROM story s WHERE s.risk_lane IN ('normal','high_risk') AND s.status IN ('planned','in_progress') AND NOT EXISTS (SELECT 1 FROM intervention i WHERE i.story_id = s.id AND i.type='approval' AND i.source='reviewer');"
+sql_open="SELECT group_concat(s.id, ', ') FROM story s WHERE s.risk_lane IN ('normal','high_risk') AND s.status IN ('planned','in_progress') AND NOT EXISTS (SELECT 1 FROM intervention i WHERE i.story_id = s.id AND i.type='approval' AND i.source='reviewer' AND i.description LIKE 'plan-review passed:%');"
 
 blockers="$( (cd "$repo" && "$cli" query sql "$sql_open" 2>/dev/null) \
   | grep -viE 'group_concat|^-+$' | tr -d ' \t' | grep -vE '^$' | head -1 )"
@@ -69,8 +70,8 @@ blockers="$( (cd "$repo" && "$cli" query sql "$sql_open" 2>/dev/null) \
 {
   echo "[harness-powers gate] BLOCKED: plan-review gate not passed for open story(ies): ${blockers}."
   echo "Edits outside docs/ are blocked until the plan is reviewed."
-  echo "Run the plan-review gate (the designing skill), then record it to unlock:"
-  echo "  scripts/bin/harness-cli intervention add --story <ID> --type approval --source reviewer --description \"plan-review passed: <summary>\""
-  echo "Reviewer unavailable? Do a self-review pass, then record the same with --description \"self-review; external-review inactive\"."
+  echo "Continue the durable task with: work <task-id>"
+  echo "After plan review and freeze, the human unlocks it with: approve <task-id>"
+  echo "Self-review is allowed only when explicitly accepted and recorded as degraded independence."
 } >&2
 exit 2

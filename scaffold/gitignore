@@ -29,5 +29,8 @@ scripts/bin/harness-cli.exe
 !.harness/changesets/
 !.harness/changesets/*.changeset.jsonl
 
+# Harness Powers shared task mailbox (local runtime state).
+.harness-powers/runtime/
+
 # Personal Claude Code settings (machine-specific marketplace path).
 .claude/settings.local.json

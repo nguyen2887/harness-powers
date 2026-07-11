@@ -22,7 +22,7 @@ Describe the behavior this story must make true.
 - Criterion 2.
 - Criterion 3.
 
-## Design Notes
+## Design
 
 - Commands:
 - Queries:
@@ -30,6 +30,18 @@ Describe the behavior this story must make true.
 - Tables:
 - Domain rules:
 - UI surfaces:
+
+## Execution Plan
+
+1. Test or proof to add first.
+2. Minimal implementation step with exact file/symbol.
+3. Verification command.
+
+## Stop Conditions
+
+- Product contract becomes ambiguous.
+- A frozen design assumption contradicts the code.
+- Validation requirements would need to be weakened.
 
 ## Validation
 

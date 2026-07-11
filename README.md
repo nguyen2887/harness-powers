@@ -1,143 +1,136 @@
 # harness-powers
 
-Lean, harness-native process skills. Installed as a Claude Code plugin, but the
-pipeline it wires into a repo runs on **Claude Code, Codex, Antigravity/agy, and
-Grok** alike (via `AGENTS.md` + vendored skills + a PreToolUse hard gate). A
-distilled fork of the [Superpowers](https://github.com/obra/superpowers) workflow
-philosophy, rebuilt to act as the **enforcement layer** for repos that use the
-[repository-harness](https://github.com/hoangnb24/repository-harness) scaffold.
+A role-based execution layer for repositories using
+[repository-harness](https://github.com/hoangnb24/repository-harness). It turns a
+change request into a durable stage machine without binding the workflow to a
+model, provider, terminal layout, or session count.
 
-**Only for harness repos.** Repos without the scaffold should keep using
-Superpowers as-is.
+Only use it in Harness repos. Repos without the scaffold can keep their existing
+process skills.
 
-## Design
+## Public interface
 
-The harness owns structure (lanes, stories, decisions, durable records via
-`harness-cli` + SQLite). These skills own behavior (when to classify, when to
-design, how to test, when work may be called done). Five skills, one pipeline:
+The human needs two verbs:
 
-```
-request → intake ─┬─ tiny ─────────────────────────────→ implementing → done
-                  └─ normal/high-risk → designing ──────→ implementing → done
-                                        [Gate 1: plan review]        [Gate 2: code review]
-any bug / test failure / weirdness → debugging (root cause first, then back)
+```text
+work <description>   create and start a task
+work <task-id>       resume its current stage
+approve <task-id>    explicitly freeze a reviewed plan
 ```
 
-| Skill | Replaces (Superpowers) | Adds (Harness) |
-| --- | --- | --- |
-| `harness-powers:intake` | brainstorming trigger | risk lanes, `harness-cli intake` |
-| `harness-powers:designing` | brainstorming + writing-plans | story packets, decision records, plan-review gate |
-| `harness-powers:implementing` | test-driven-development + executing-plans | `story update` proof flags |
-| `harness-powers:debugging` | systematic-debugging | friction capture (`backlog add`) |
-| `harness-powers:done` | verification-before-completion + requesting-code-review + finishing-a-development-branch | `story verify`, lean trace, code-review gate |
+Runtime adapters may expose `/work`, `$work`, or a namespaced slash command.
+Plain text remains the portable fallback. The human does not select or remember
+the role, stage, pane, or handoff prompt.
 
-Key choices:
+## Workflow
 
-- **Lane decides depth.** Tiny work = one intake call + implement + verify. No
-  story packet, no design ceremony.
-- **One exit door.** All bookkeeping (verify, review, trace, friction) lives in
-  `done` only, so it cannot be forgotten or duplicated.
-- **Lean trace profile.** Minimal/Standard tiers only; the Detailed tier is
-  retired (the installer patches `docs/TRACE_SPEC.md` accordingly).
-- **Cross-model review gates.** Plan review after designing, code review before
-  done — each handed to a **separate, human-driven reviewer pane** on a skeptical
-  model (e.g. GPT via Codex, run read-only); you pause and hand it off, you never
-  launch the reviewer yourself. The orchestrator records the
-  reviewer's `approval` intervention in `harness.db` (that is what releases the hard
-  gate); the reviewer never writes Harness state. No reviewer handy = a self-review
-  pass instead.
-- **Review stop rule.** Fix Critical/Important, reject Minor with reasons; loop
-  until a round adds no new Critical/Important; escalate past 4 rounds. LLM
-  reviewers never say "no issues" unprompted — the stop rule keeps the loop
-  convergent.
+```text
+intake -> context -> contract -> plan-review -> freeze -> human-freeze
+                                                     -> approve -> prepare
+prepare -> verify -> code-review -> reconcile -> close -> closed
+              |                         |
+              +---- debugging <---------+
+```
 
-- **Runs on every CLI, not just Claude Code.** The pipeline is delivered three
-  ways so Codex, Antigravity/agy, and Grok follow it too: the portable
-  constitution in `AGENTS.md` (all CLIs read it), vendored skills in
-  `.codex/skills/` + `.agents/skills/` (Grok runs on the constitution), and a
-  `PreToolUse` **hard gate** — one `harness-powers-gate` script wired into
-  `.claude/settings.json`, `.codex/hooks.json`, and `.grok/hooks/`. It reads
-  harness.db and blocks edits to code until every open normal/high-risk story
-  has a reviewer `approval` intervention, so the plan-review gate cannot be
-  skipped by a model that "forgot" it. Fail-open (no db/CLI, or a docs-only edit,
-  is always allowed); Codex/Grok project hooks need a one-time trust.
+Tiny work may skip contract and plan review. Normal and high-risk work passes the
+full freeze gate.
+
+The internal skills are:
+
+| Skill | Role contract |
+| --- | --- |
+| `work` | resolve task state, claim the current stage, dispatch one procedure |
+| `approve` | record the explicit human freeze |
+| `intake` | classify lane and persist the request |
+| `context` | collect grounded, read-only repository evidence |
+| `designing` | own contract, design, plan, and freeze reconciliation |
+| `reviewing` | return an evidence-backed read-only plan/code verdict |
+| `implementing` | prepare, build, and reconcile findings |
+| `verifying` | collect fresh mechanical evidence |
+| `debugging` | isolate root cause before changing behavior |
+| `done` | close story, trace, friction, and completion records |
+
+## Shared mailbox
+
+`.harness-powers/bin/harness-powers-workflow` stores task state and append-only
+artifacts under `.harness-powers/runtime/tasks/`. Each `work` invocation:
+
+1. resolves or creates the task;
+2. claims its current stage with a lease;
+3. infers the required role from durable state;
+4. writes the stage result to the mailbox;
+5. advances exactly one boundary and releases the claim.
+
+This removes manual copy/paste between panes. One session can run the whole flow,
+or multiple sessions can take successive claims. Plan and code review prefer a
+session independent from the artifact author. Explicit self-review is supported
+only as a recorded degraded-independence mode.
+
+## Enforcement
+
+The installer delivers the same policy through marker-guarded repository
+instructions, vendored portable skills, runtime hook adapters, and one hard-gate
+script. The gate reads `harness.db` and blocks code edits for open normal or
+high-risk stories until a reviewer approval begins `plan-review passed:`. The
+human freeze is recorded separately as `human-freeze approved:`.
+
+Verification, judgment, reconciliation, and close are separate. Only `done` may
+claim completion. Merge, push, PR, and deployment remain explicit human choices.
 
 ## Install
 
-One-time, in Claude Code:
+Install the plugin globally so init is available in an empty directory:
 
-```
+```text
 /plugin marketplace add nguyen2887/harness-powers
 /plugin install harness-powers@harness-powers
 ```
 
-Global install is intended: `/harness-powers:init` must be available in brand-new
-empty projects. The pipeline itself does NOT activate globally — it only
-auto-triggers in repos whose `CLAUDE.md` carries the harness-powers block, which
-`init` writes. Repos without the block keep running Superpowers untouched.
+Then initialize a project:
 
-## Start a project
-
-```
-mkdir my-project && cd my-project && claude
-> /harness-powers:init
-> (commit happens, restart session)
-> "I want to build ..."
+```text
+/harness-powers:init
 ```
 
-`init` is idempotent. Re-running refreshes harness-powers-owned artifacts in place
-(the marker-guarded `CLAUDE.md`/`AGENTS.md` blocks, vendored `.codex/.agents` skills,
-and the gate script), so a plugin upgrade lands without deleting anything by hand;
-your own files are never overwritten. It:
+Re-running init refreshes only harness-powers-owned surfaces: the marked
+instruction blocks, `docs/AGENT_WORKFLOW.md`, portable skills, workflow helper,
+and gate. Existing project files, `harness.db`, and existing hook configuration
+are preserved.
 
-1. `git init` if needed, then copies the vendored scaffold (34 files: AGENTS.md,
-   docs/, templates, SQL schema, vendored `harness-cli.exe`).
-2. On macOS/Linux, auto-downloads the matching `harness-cli` binary from the
-   pinned upstream release (checksum-verified); the vendored `.exe` covers
-   Windows. Then runs `harness-cli init` to create `harness.db`.
-3. Appends the pipeline block to `CLAUDE.md` (marker-guarded) — this is what
-   makes the pipeline auto-trigger and tells Superpowers to stand down — and a
-   portable copy to `AGENTS.md` so non-Claude CLIs (Codex, agy, Grok) follow the
-   same intake → done pipeline and gates.
-4. Ensures the lean-trace override note in `docs/TRACE_SPEC.md`.
-5. Registers `codex` (capability `external-review`) and `agy` (capability
-   `repo-explore`) in the harness tool registry when those CLIs are on PATH,
-   then runs `tool check`.
+Init also:
 
-It also works on repos that already have a harness scaffold — existing files are
-skipped, only the harness-powers wiring is added.
+1. creates the vendored scaffold when files are missing;
+2. installs the pinned `harness-cli` and initializes `harness.db`;
+3. vendors portable skills into `.codex/skills/`, `.agents/skills/`, and
+   `.grok/skills/`;
+4. installs the shared mailbox helper and plan gate;
+5. wires hook adapters when their config files do not already exist.
 
-**Iterating on skills:** installed plugins are cached under
-`~/.claude/plugins/cache/`, not read in-place. After editing skills, push and run
-`/plugin marketplace update harness-powers` to refresh. To test edits live
-without the cache, launch with `claude --plugin-dir ~/Codes/harness-powers`.
+The installer deliberately does not register specific CLIs or bind roles to
+models. Runtime and model selection remain replaceable deployment policy.
 
 ## Vendored scaffold
 
-`scaffold/` is vendored from
-[repository-harness](https://github.com/hoangnb24/repository-harness) (MIT,
-(c) 2025 Hoang Nguyen — see `LICENSES-repository-harness-MIT.txt`), pinned at
-harness-cli v0.1.11. Only the windows-x64 binary is bundled; on macOS/Linux
-`init` auto-downloads the matching binary from the pinned upstream release
-(`harness-cli-v0.1.11`) and checksum-verifies it. The root `.gitignore` template is
-stored as `scaffold/gitignore` (no dot) so it stays inert inside this repo, and
-no `CLAUDE.md` lives under `scaffold/` — the block is appended from
-`templates/` at init time so this repo's own sessions never load it.
-
-## Acceptance test
-
-Open a fresh Claude Code session in an installed repo and ask for a small code
-change. A working install classifies the task through `harness-powers:intake`
-(announcing the lane) before touching anything.
+`scaffold/` is derived from repository-harness (MIT, © 2025 Hoang Nguyen; see
+`LICENSES-repository-harness-MIT.txt`) and pins harness-cli v0.1.11. Windows x64
+is bundled; supported macOS/Linux binaries are downloaded with checksum
+verification during init.
 
 ## Layout
 
+```text
+.claude-plugin/   plugin metadata
+skills/           plugin skills, including public work/approve entrypoints
+portable-skills/  runtime-neutral copies vendored by init
+gate/             mailbox helper, hard gate, and hook adapters
+scaffold/         repository-harness template
+templates/        marker-guarded instruction blocks
+scripts/          idempotent init scripts
 ```
-.claude-plugin/   plugin.json + marketplace.json
-skills/           init / intake / designing / implementing / debugging / done (Claude Code plugin)
-portable-skills/  CLI-agnostic intake→done skills; init vendors them into .codex/skills + .agents/skills
-gate/             hard-gate script + PreToolUse hook configs (Claude / Codex / Grok)
-scaffold/         vendored repository-harness template (+ harness-cli.exe)
-templates/        claude-md-block.md, agents-md-block.md, trace-spec-lean-block.md
-scripts/          init-project.ps1, init-project.sh
-```
+
+## Acceptance check
+
+In an initialized repo, invoke `work <small change>`. It should create an intake,
+claim context, persist a mailbox artifact, and report the task id plus next stage.
+Invoking `work <task-id>` from another session should resume from that durable
+stage without copied chat history.

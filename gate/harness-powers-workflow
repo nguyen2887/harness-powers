@@ -1,0 +1,259 @@
+#!/usr/bin/env bash
+# Shared, model-agnostic workflow mailbox for harness-powers.
+set -euo pipefail
+
+die() { echo "[harness-powers workflow] $*" >&2; exit 2; }
+
+find_repo() {
+  local d="${HARNESS_REPO_ROOT:-$PWD}"
+  while [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -f "$d/harness.db" ]; then printf '%s\n' "$d"; return 0; fi
+    d="$(dirname "$d")"
+  done
+  die "harness.db not found; run from an initialized Harness repo"
+}
+
+REPO="$(find_repo)"
+RUNTIME="${HARNESS_POWERS_RUNTIME:-$REPO/.harness-powers/runtime}"
+LEASE_SECONDS="${HARNESS_POWERS_LEASE_SECONDS:-1800}"
+mkdir -p "$RUNTIME/tasks"
+
+validate_id() {
+  case "${1:-}" in
+    ""|*[!A-Za-z0-9._-]*) die "invalid task id '$1'" ;;
+  esac
+}
+
+task_dir() { validate_id "$1"; printf '%s/tasks/%s\n' "$RUNTIME" "$1"; }
+field_path() { printf '%s/fields/%s\n' "$(task_dir "$1")" "$2"; }
+read_field() { local p; p="$(field_path "$1" "$2")"; [ -f "$p" ] && sed -n '1p' "$p" || true; }
+write_field() {
+  local p tmp
+  p="$(field_path "$1" "$2")"; mkdir -p "$(dirname "$p")"
+  tmp="$p.tmp.$$"; printf '%s\n' "$3" > "$tmp"; mv "$tmp" "$p"
+}
+
+actor_id() {
+  if [ -n "${HARNESS_ACTOR_ID:-}" ]; then printf '%s\n' "$HARNESS_ACTOR_ID"; return; fi
+  local terminal
+  terminal="$(tty 2>/dev/null || true)"
+  if [ -n "$terminal" ] && [ "$terminal" != "not a tty" ]; then
+    terminal="${terminal#/dev/}"; terminal="${terminal//\//-}"
+    printf '%s-%s-ppid-%s\n' "$(hostname 2>/dev/null || echo host)" "$terminal" "$PPID"
+  else
+    printf '%s-ppid-%s\n' "$(hostname 2>/dev/null || echo host)" "$PPID"
+  fi
+}
+
+require_task() { [ -d "$(task_dir "$1")" ] || die "task '$1' not found"; }
+claim_dir() { printf '%s/claim\n' "$(task_dir "$1")"; }
+
+release_claim() {
+  local d; d="$(claim_dir "$1")"
+  [ -d "$d" ] && rm -rf "$d"
+  if [ "$(read_field "$1" stage)" = closed ]; then write_field "$1" status closed
+  else write_field "$1" status ready
+  fi
+}
+
+require_transition() {
+  local expected="$1" next="$2" role="$3" allowed=""
+  case "$expected:$next:$role" in
+    context:debugging:implementation-worker|context:prepare:implementation-worker|context:contract:design-authority|\
+    contract:plan-review:technical-reviewer|plan-review:freeze:design-authority|\
+    freeze:plan-review:technical-reviewer|freeze:human-freeze:human|\
+    prepare:verify:implementation-worker|verify:code-review:technical-reviewer|\
+    verify:debugging:implementation-worker|debugging:verify:implementation-worker|\
+    debugging:contract:design-authority|code-review:reconcile:implementation-worker|\
+    reconcile:verify:implementation-worker|reconcile:contract:design-authority|\
+    reconcile:close:closer|close:closed:none) allowed=yes ;;
+  esac
+  [ "$allowed" = yes ] || die "invalid transition '$expected -> $next' for role '$role'"
+}
+
+cmd_create() {
+  [ "$#" -ge 4 ] || die "usage: create <task-id> <lane> <intake-id> <summary>"
+  local task="$1" lane="$2" intake="$3"; shift 3
+  local dir; dir="$(task_dir "$task")"
+  [ ! -e "$dir" ] || die "task '$task' already exists"
+  mkdir -p "$dir/fields" "$dir/handoffs"
+  write_field "$task" lane "$lane"
+  write_field "$task" intake_id "$intake"
+  write_field "$task" summary "$*"
+  write_field "$task" story_id ""
+  write_field "$task" stage context
+  write_field "$task" status ready
+  write_field "$task" required_role context-worker
+  write_field "$task" latest_artifact ""
+  write_field "$task" artifact_author ""
+  write_field "$task" reviewer_actor ""
+  write_field "$task" review_independence ""
+  write_field "$task" sequence 0
+  printf '%s\n' "$task"
+}
+
+cmd_show() {
+  [ "$#" -eq 1 ] || die "usage: show <task-id>"
+  local task="$1" d owner expires
+  require_task "$task"; d="$(claim_dir "$task")"
+  owner=""; expires=""
+  [ -f "$d/owner" ] && owner="$(sed -n '1p' "$d/owner")"
+  [ -f "$d/expires" ] && expires="$(sed -n '1p' "$d/expires")"
+  printf 'task_id: %s\n' "$task"
+  for f in lane intake_id story_id stage status required_role latest_artifact artifact_author reviewer_actor review_independence summary; do
+    printf '%s: %s\n' "$f" "$(read_field "$task" "$f")"
+  done
+  printf 'claimed_by: %s\nclaim_expires: %s\n' "$owner" "$expires"
+}
+
+cmd_claim() {
+  [ "$#" -ge 2 ] || die "usage: claim <task-id> <actor-id> [--allow-self]"
+  local task="$1" actor="$2" allow_self="${3:-}" stage author d now expires
+  require_task "$task"; stage="$(read_field "$task" stage)"
+  [ "$stage" != "human-freeze" ] || die "task '$task' awaits explicit human approval"
+  [ "$stage" != "closed" ] || die "task '$task' is closed"
+  d="$(claim_dir "$task")"; now="$(date +%s)"
+  if [ -d "$d" ]; then
+    expires="$(sed -n '1p' "$d/expires" 2>/dev/null || echo 0)"
+    if [ "${expires:-0}" -le "$now" ]; then rm -rf "$d"; else
+      die "stage already claimed by $(sed -n '1p' "$d/owner" 2>/dev/null || echo unknown) until $expires"
+    fi
+  fi
+  mkdir "$d" 2>/dev/null || die "stage claim raced; try again"
+  printf '%s\n' "$actor" > "$d/owner"
+  printf '%s\n' "$((now + LEASE_SECONDS))" > "$d/expires"
+  case "$stage" in
+    plan-review|code-review)
+      author="$(read_field "$task" artifact_author)"
+      if [ -n "$author" ] && [ "$author" = "$actor" ] && [ "$allow_self" != "--allow-self" ]; then
+        rm -rf "$d"
+        die "current actor authored the review artifact; use another session or explicit --allow-self"
+      fi
+      if [ -n "$author" ] && [ "$author" = "$actor" ]; then
+        write_field "$task" review_independence self
+      else
+        write_field "$task" review_independence independent-session
+      fi
+      ;;
+  esac
+  write_field "$task" status in-progress
+  printf 'claimed: %s\nstage: %s\nrequired_role: %s\n' "$actor" "$stage" "$(read_field "$task" required_role)"
+}
+
+cmd_artifact() {
+  [ "$#" -eq 3 ] || die "usage: artifact <task-id> <actor-id> <stage-label>"
+  local task="$1" actor="$2" label="$3" d owner seq rel
+  require_task "$task"; d="$(claim_dir "$task")"
+  owner="$(sed -n '1p' "$d/owner" 2>/dev/null || true)"
+  [ "$owner" = "$actor" ] || die "actor '$actor' does not hold the task claim"
+  validate_id "$label"
+  seq="$(read_field "$task" sequence)"; seq="${seq:-0}"; seq=$((seq + 1))
+  write_field "$task" sequence "$seq"
+  rel=".harness-powers/runtime/tasks/$task/handoffs/$(printf '%03d' "$seq")-$label.md"
+  mkdir -p "$(dirname "$REPO/$rel")"; : > "$REPO/$rel"
+  printf '%s\n' "$rel"
+}
+
+cmd_renew() {
+  [ "$#" -eq 2 ] || die "usage: renew <task-id> <actor-id>"
+  local task="$1" actor="$2" d owner now
+  require_task "$task"; d="$(claim_dir "$task")"
+  owner="$(sed -n '1p' "$d/owner" 2>/dev/null || true)"
+  [ "$owner" = "$actor" ] || die "actor '$actor' does not hold the task claim"
+  now="$(date +%s)"
+  printf '%s\n' "$((now + LEASE_SECONDS))" > "$d/expires.tmp.$$"
+  mv "$d/expires.tmp.$$" "$d/expires"
+  printf 'claim_expires: %s\n' "$((now + LEASE_SECONDS))"
+}
+
+cmd_advance() {
+  [ "$#" -eq 6 ] || die "usage: advance <task-id> <actor-id> <expected-stage> <next-stage> <required-role> <artifact>"
+  local task="$1" actor="$2" expected="$3" next="$4" role="$5" artifact="$6"
+  local d owner current abs
+  require_task "$task"; current="$(read_field "$task" stage)"
+  [ "$current" = "$expected" ] || die "stage changed: expected '$expected', found '$current'"
+  require_transition "$expected" "$next" "$role"
+  d="$(claim_dir "$task")"; owner="$(sed -n '1p' "$d/owner" 2>/dev/null || true)"
+  [ "$owner" = "$actor" ] || die "actor '$actor' does not hold the task claim"
+  case "$artifact" in
+    .harness-powers/runtime/tasks/"$task"/handoffs/*) ;;
+    *) die "artifact must live in this task's mailbox" ;;
+  esac
+  abs="$REPO/$artifact"; [ -s "$abs" ] || die "artifact '$artifact' is missing or empty"
+  write_field "$task" latest_artifact "$artifact"
+  case "$next" in plan-review|code-review) write_field "$task" artifact_author "$actor" ;; esac
+  case "$expected" in plan-review|code-review) write_field "$task" reviewer_actor "$actor" ;; esac
+  write_field "$task" stage "$next"
+  write_field "$task" required_role "$role"
+  if [ "$next" = closed ]; then write_field "$task" status closed
+  else write_field "$task" status ready
+  fi
+  rm -rf "$d"
+  printf 'task_id: %s\nstage: %s\nrequired_role: %s\nartifact: %s\n' "$task" "$next" "$role" "$artifact"
+}
+
+cmd_set_story() {
+  [ "$#" -eq 2 ] || die "usage: set-story <task-id> <story-id>"
+  require_task "$1"; validate_id "$2"; write_field "$1" story_id "$2"
+}
+
+cmd_approve() {
+  [ "$#" -eq 1 ] || die "usage: approve <task-id>"
+  local task="$1" stage lock
+  require_task "$task"; lock="$(task_dir "$task")/approve-lock"
+  mkdir "$lock" 2>/dev/null || die "approval for task '$task' is already in progress"
+  trap 'rmdir "$lock" 2>/dev/null || true' EXIT INT TERM
+  stage="$(read_field "$task" stage)"
+  if [ "$stage" != "human-freeze" ]; then
+    rmdir "$lock"
+    die "task '$task' is at '$stage', not human-freeze"
+  fi
+  write_field "$task" stage prepare
+  write_field "$task" required_role implementation-worker
+  write_field "$task" status ready
+  rm -rf "$(claim_dir "$task")"
+  rmdir "$lock"
+  printf 'task_id: %s\nstage: prepare\nrequired_role: implementation-worker\n' "$task"
+}
+
+cmd_release() {
+  [ "$#" -ge 1 ] || die "usage: release <task-id> [actor-id|--force]"
+  local task="$1" requested="${2:---force}" owner
+  require_task "$task"; owner="$(sed -n '1p' "$(claim_dir "$task")/owner" 2>/dev/null || true)"
+  [ -z "$owner" ] && {
+    if [ "$(read_field "$task" stage)" = closed ]; then write_field "$task" status closed
+    else write_field "$task" status ready
+    fi
+    return 0
+  }
+  [ "$requested" = "--force" ] || [ "$requested" = "$owner" ] || die "claim belongs to '$owner'"
+  release_claim "$task"
+}
+
+cmd_list() {
+  local d
+  for d in "$RUNTIME"/tasks/*; do
+    [ -d "$d" ] || continue
+    printf '%s\t%s\t%s\t%s\n' "$(basename "$d")" \
+      "$(read_field "$(basename "$d")" stage)" \
+      "$(read_field "$(basename "$d")" status)" \
+      "$(read_field "$(basename "$d")" required_role)"
+  done
+}
+
+cmd="${1:-}"; [ -n "$cmd" ] || die "commands: actor create show claim renew artifact advance set-story approve release list"
+shift || true
+case "$cmd" in
+  actor) actor_id ;;
+  create) cmd_create "$@" ;;
+  show) cmd_show "$@" ;;
+  claim) cmd_claim "$@" ;;
+  renew) cmd_renew "$@" ;;
+  artifact) cmd_artifact "$@" ;;
+  advance) cmd_advance "$@" ;;
+  set-story) cmd_set_story "$@" ;;
+  approve) cmd_approve "$@" ;;
+  release) cmd_release "$@" ;;
+  list) cmd_list "$@" ;;
+  *) die "unknown command '$cmd'" ;;
+esac

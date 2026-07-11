@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Initializes a project with the vendored repository-harness scaffold and the
 # harness-powers pipeline. Idempotent. Re-running REFRESHES harness-powers-owned
-# artifacts (pipeline blocks between markers, vendored skills, the gate script) so
-# a new plugin version lands without deleting anything by hand; your own files
-# (code, docs, hook JSON, harness.db, and anything outside the
-# markers) are never overwritten. Mirror of init-project.ps1.
+# artifacts (pipeline blocks, workflow reference, vendored skills, gate script)
+# so a new plugin version lands without deleting anything by hand. User code/docs,
+# hook JSON, harness.db, and content outside owned markers are preserved.
+# Mirror of init-project.ps1.
 set -euo pipefail
 
 DIRECTORY="${1:-$(pwd)}"
@@ -153,17 +153,16 @@ while IFS= read -r -d '' file; do
 done < <(find "$SCAFFOLD" -type f -print0)
 step "Scaffold: $created file(s) created, $skipped already present (skipped)."
 
-# --- 2b. Portable skills for non-Claude CLIs (Codex -> .codex, agy -> .agents) ---
-# Claude Code uses the harness-powers plugin skills; these vendored copies give
-# Codex and agy the same intake -> done procedures. Overwritten on re-init so a new
-# plugin version refreshes them (they are harness-powers-owned, not your files).
+# --- 2b. Portable runtime skills -----------------------------------------------
+# Overwritten on re-init so a new plugin version refreshes only
+# harness-powers-owned skill directories.
 PORTABLE_SKILLS="$ROOT/portable-skills"
 if [ -d "$PORTABLE_SKILLS" ]; then
   sk_n=0
   for src in "$PORTABLE_SKILLS"/*/; do
     [ -d "$src" ] || continue
     name="$(basename "$src")"
-    for base in ".codex/skills" ".agents/skills"; do
+    for base in ".codex/skills" ".agents/skills" ".grok/skills"; do
       dest="$DIRECTORY/$base/$name"
       if [ "$DRY_RUN" = "--dry-run" ]; then
         sk_n=$((sk_n + 1))
@@ -174,22 +173,33 @@ if [ -d "$PORTABLE_SKILLS" ]; then
       fi
     done
   done
-  step "Portable skills: $sk_n vendored/refreshed (.codex/skills + .agents/skills)."
+  step "Portable skills: $sk_n vendored/refreshed across runtime adapters."
 fi
 
-# --- 2c. Remove legacy harness-powers.toml -------------------------------------
-# Older installs vendored a harness-powers.toml of "model hints"; its comments
-# described the retired auto-invoke gates, and some CLIs read those comments as
-# instructions and auto-spawned a reviewer. Reviewer/explorer model is now the
-# human's per-pane choice, so the file is obsolete. Delete OUR copy (identified by
-# its header) on re-init; leave any unrelated same-named file alone.
+# --- 2c. Role/stage workflow reference (harness-powers-owned) ------------------
+workflow_src="$SCAFFOLD/docs/AGENT_WORKFLOW.md"
+workflow_dest="$DIRECTORY/docs/AGENT_WORKFLOW.md"
+if [ -f "$workflow_src" ]; then
+  if [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would install/refresh docs/AGENT_WORKFLOW.md"
+  else
+    mkdir -p "$(dirname "$workflow_dest")"
+    cp "$workflow_src" "$workflow_dest"
+    step "Installed/refreshed docs/AGENT_WORKFLOW.md."
+  fi
+fi
+
+# --- 2d. Remove legacy harness-powers.toml -------------------------------------
+# Older installs vendored a harness-powers.toml that bound workflow roles to
+# runtime choices. The durable role resolver replaces it. Delete OUR copy
+# (identified by its header); leave any unrelated same-named file alone.
 legacy_toml="$DIRECTORY/harness-powers.toml"
 if [ -f "$legacy_toml" ] && head -n 3 "$legacy_toml" | grep -q 'harness-powers'; then
   if [ "$DRY_RUN" = "--dry-run" ]; then
     step "DRY RUN: would remove legacy harness-powers.toml (obsolete model-hints file)."
   else
     rm -f "$legacy_toml"
-    step "Removed legacy harness-powers.toml (obsolete; reviewer/explorer model is now a per-pane human choice)."
+    step "Removed legacy harness-powers.toml (obsolete runtime bindings)."
   fi
 fi
 
@@ -230,46 +240,20 @@ if [ -f "$TRACE_SPEC" ]; then
   fi
 fi
 
-# --- 6. Tool registry: external-review / repo-explore --------------------------------
-register_tool() {
-  local name="$1" capability="$2" responsibility="$3" description="$4"
-  local cmd_path
-  cmd_path="$(command -v "$name" 2>/dev/null)" || true
-  if [ -z "$cmd_path" ]; then
-    step "CLI '$name' not on PATH. Skipped registration."
-    return 0
-  fi
-  if [ "$DRY_RUN" = "--dry-run" ]; then
-    step "DRY RUN: would register '$name' ($cmd_path) as '$capability'"
-    return 0
-  fi
-  # Register the resolved path so the CLI's own PATH probe cannot disagree.
-  if (cd "$DIRECTORY" && "$CLI" tool register --name "$name" --kind cli \
-      --capability "$capability" --command "$cmd_path" \
-      --description "$description" --responsibility "$responsibility"); then
-    step "Registered '$name' -> $capability"
-  else
-    step "Registration of '$name' failed or already exists. Continuing."
-  fi
-}
-
-if [ -x "$CLI" ]; then
-  register_tool codex external-review "Verification" "GPT reviewer via Codex CLI for plan-review and code-review gates"
-  register_tool agy repo-explore "Context selection" "Gemini explorer via Antigravity CLI for wide repo scans"
-  [ "$DRY_RUN" = "--dry-run" ] || (cd "$DIRECTORY" && "$CLI" tool check) || true
-fi
-
-# --- 7. Hard-gate hooks (plan-review) for Claude / Codex / Grok ------------------
+# --- 6. Shared mailbox helper + hard-gate adapters -----------------------------
 GATE_SRC="$ROOT/gate"
 if [ -d "$GATE_SRC" ]; then
   gate_bin="$DIRECTORY/.harness-powers/bin/harness-powers-gate"
+  workflow_bin="$DIRECTORY/.harness-powers/bin/harness-powers-workflow"
   if [ "$DRY_RUN" = "--dry-run" ]; then
-    step "DRY RUN: would install/refresh .harness-powers/bin/harness-powers-gate"
+    step "DRY RUN: would install/refresh mailbox helper and hard gate"
   else
     mkdir -p "$(dirname "$gate_bin")"
     cp "$GATE_SRC/harness-powers-gate" "$gate_bin"
+    cp "$GATE_SRC/harness-powers-workflow" "$workflow_bin"
     chmod 755 "$gate_bin"
-    step "Installed/refreshed .harness-powers/bin/harness-powers-gate."
+    chmod 755 "$workflow_bin"
+    step "Installed/refreshed mailbox helper and hard gate."
   fi
 
   install_hook() { # $1 src rel, $2 dest rel, $3 label
@@ -289,9 +273,9 @@ if [ -d "$GATE_SRC" ]; then
   install_hook "hooks/claude-settings.json" ".claude/settings.json"           "Claude Code"
 
   if [ "$DRY_RUN" != "--dry-run" ]; then
-    step "Hard-gate active: edits to code are blocked until each open normal/high-risk story has a reviewer approval."
+    step "Hard-gate active: edits to code are blocked until each open normal/high-risk story has a 'plan-review passed:' reviewer approval."
     step "TRUST REQUIRED: in Codex and Grok run '/hooks-trust' (or launch with --trust) once, or project hooks will NOT execute."
   fi
 fi
 
-step "Init complete. Commit the scaffold, then start a fresh session (the CLAUDE.md block loads at session start)."
+step "Init complete. Start a fresh session, then use 'work <description>' or its runtime adapter."

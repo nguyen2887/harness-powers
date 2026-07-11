@@ -1,61 +1,69 @@
 ---
 name: implementing
-description: Use to execute an approved design (normal/high-risk) or a tiny-lane task in a Harness repo - TDD discipline, branch isolation, story proof updates as layers pass. Preceded by intake (tiny) or designing (normal/high-risk).
+description: Internal implementation procedure dispatched by the work skill for prepare or reconcile. Implement test-first, reconcile mailbox findings, write the stage artifact, and advance to verify, contract, or close. Never review your own artifact or claim completion.
 ---
 
-# Implementing
+# Implementation Worker
 
-Execute the plan with test-first discipline. Coordination stays here; success claims do not — those belong to the **done** skill.
+Own product-code writes for the assigned story and stage only.
 
-**Announce at start:** "Implementing: executing this work test-first."
+**Announce at start:** "Implementation worker: executing the assigned stage."
 
-**Branch first:** never work on main/master without explicit consent. Create a branch; use a git worktree when you need workspace isolation.
+## Boundary
 
-## The Iron Law
+- Only one implementation worker may write a story at a time.
+- Never work on main/master without explicit consent.
+- Never change the frozen contract or design. Return such findings to the design authority.
+- Never perform final review of your own code or launch a reviewer.
 
-```
-NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
-```
+## Prepare
 
-Red → Green → Refactor, every behavior:
+1. Verify the handoff paths. Normal/high-risk work also requires the frozen
+   plan, plan-review verdict, and verify command. Tiny work requires its intake
+   and context-lite packet; declare the narrow verification command before edits.
+2. Create a branch. Multiple panes may share this checkout because the mailbox
+   enforces a single product-code writer; do not create an isolated worktree
+   unless the project has explicitly configured a shared Harness control plane.
+3. Record the base commit and run the narrow baseline check. A failing baseline
+   enters debugging before product changes.
 
-1. Write the smallest failing test for the next behavior
-2. Run it and watch it fail — if it passes, the test is wrong or the behavior exists
-3. Write the minimal code to make it pass
-4. Run the tests — all green
-5. Refactor while keeping green
-6. Commit
+## Build
 
-**Exception:** pure config, docs, or copy edits with no runtime behavior (most tiny-lane work). Verify those by running the relevant check or build instead of a new test.
+For every behavior, use Red -> Green -> Refactor:
 
-## Working the Plan
+1. Write the smallest failing test and observe the intended failure.
+2. Write the minimum production change.
+3. Run the targeted test and relevant suite.
+4. Refactor while green and commit at coherent checkpoints.
 
-- Follow the story's acceptance criteria / execplan **one task at a time**, in order. Track progress as you go.
-- As proof layers actually pass, record them: `harness-cli story update --id US-XXX --unit 1 --integration 1 --e2e 0 --platform 0` (numeric 1/0 only — the CLI rejects yes/no). Record `1` only for layers you ran and saw pass.
-- Commit frequently — every green cycle is a commit point.
-- 2+ independent tasks with no shared state? Dispatch parallel agents if your CLI supports it.
+Pure docs/config/copy work may use the relevant check instead of a new test.
+Follow the frozen plan in order. Record proof flags only for checks actually run
+and observed passing. Stop when reality contradicts the plan or requires a new
+design decision.
 
-## When to Stop and Ask
+When the build meets the frozen criteria, write base commit, changed paths,
+story path, tests, and verify command to the supplied mailbox artifact, then run:
 
-STOP immediately and ask your human partner when:
+`workflow advance <task> <actor> prepare verify implementation-worker <artifact>`.
 
-- A dependency is missing, an instruction is unclear, or a plan step contradicts reality
-- Verification fails repeatedly on the same step
-- The plan has a gap that requires a design decision
+Do not claim completion.
 
-Ask instead of guessing. Do not force through blockers.
+## Reconcile
 
-**Bug or unexpected failure** during work → continue with the **debugging** skill, then return here.
+When a code-review verdict returns:
 
-## Exit
+1. Falsify or confirm each finding against the code and contract.
+2. Critical/Important: add or update the failing test, fix, then return to verify.
+3. Minor: fix or reject with a technical reason.
+4. If a finding changes contract/design, write the evidence to the mailbox and
+   advance `reconcile -> contract` with required role `design-authority`.
+5. Re-review only changed hunks and unresolved findings.
+6. Code changes: write resolutions and changed paths to the artifact, then run
+   `workflow advance <task> <actor> reconcile verify implementation-worker <artifact>`.
+7. Approved without further code changes:
+   - story-backed work: record `code-review passed:` with `--source reviewer`,
+     referencing the mailbox verdict and reviewer actor;
+   - write the final verdict and resolutions to the artifact;
+   - run `workflow advance <task> <actor> reconcile close closer <artifact>`.
 
-All acceptance criteria met and locally green → continue with the **done** skill. That skill is the ONLY exit. Do not declare success, summarize completion, or offer merge options here.
-
-## Red Flags
-
-| Thought | Reality |
-| --- | --- |
-| "I'll write tests after, it's faster" | Test-after tests what you built, not what was required. |
-| "The test obviously would fail, skip running it" | Unrun red tests hide broken tests. Watch it fail. |
-| "I'll mark --unit 1 now, tests come later" | Proof flags mirror reality, not intentions. |
-| "Small deviation from the plan, no need to mention" | Deviations are design decisions. Ask or record. |
+Report only the task id and next stage. Never print a handoff for the human to copy.

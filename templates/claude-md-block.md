@@ -1,18 +1,19 @@
 <!-- HARNESS-POWERS:BEGIN -->
 ## Harness Powers Workflow
 
-This repo uses the Harness scaffold with the harness-powers skill pipeline.
+This repo uses the durable role-based workflow in `docs/AGENT_WORKFLOW.md`.
 
-**Every task starts with `harness-powers:intake` — BEFORE any other response, clarifying question, or file exploration.**
+- New or resumed work enters through `/harness-powers:work <description-or-task-id>`.
+- Explicit plan freeze enters through `/harness-powers:approve <task-id>`.
+- Plain `work ...` and `approve ...` are equivalent portable triggers.
+- The human never needs to name a role, model, provider, pane, or stage.
+- Each invocation claims the current stage, writes its mailbox artifact, advances
+  one boundary, and stops. Never ask the human to copy a handoff.
+- Do not implicitly launch another CLI, pane, Task, or sub-agent.
+- Plan/code review should use a session independent of the artifact author;
+  explicit self-review is recorded as degraded independence.
+- Only `harness-powers:done` may claim completion.
 
-Pipeline:
-
-- intake → (tiny) → implementing → done
-- intake → (normal / high-risk) → designing → implementing → done
-- Any bug, test failure, or unexpected behavior → `harness-powers:debugging`
-- Every task exits ONLY through `harness-powers:done` (verification + review gate + trace)
-
-Precedence: in this repo, harness-powers REPLACES the Superpowers process skills. Do NOT invoke: superpowers:brainstorming, superpowers:writing-plans, superpowers:executing-plans, superpowers:subagent-driven-development, superpowers:systematic-debugging, superpowers:test-driven-development, superpowers:verification-before-completion, superpowers:requesting-code-review, superpowers:finishing-a-development-branch. Superpowers utility skills (superpowers:using-git-worktrees, superpowers:dispatching-parallel-agents) remain available.
-
-Trace profile: LEAN — Minimal/Standard tiers only; the Detailed tier in `docs/TRACE_SPEC.md` is retired here. Low `score-trace` values are expected and are not a quality problem.
+Precedence: harness-powers replaces Superpowers process skills in this repo.
+Utility skills remain available when they do not bypass Harness boundaries.
 <!-- HARNESS-POWERS:END -->

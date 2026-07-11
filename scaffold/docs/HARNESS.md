@@ -227,6 +227,11 @@ items; `low` is not a valid lane.
 
 For every task:
 
+Follow the role-routed stage machine and handoff contracts in
+`docs/AGENT_WORKFLOW.md`. The steps below describe the durable Harness records;
+the mailbox decides the next role. One session may execute several stages
+sequentially, but review independence must remain explicit.
+
 1. Classify the request with `docs/FEATURE_INTAKE.md`.
 2. Record the classification with `scripts/bin/harness-cli intake`.
 3. Locate the affected product docs and story files.

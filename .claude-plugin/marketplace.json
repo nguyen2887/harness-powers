@@ -7,7 +7,7 @@
     {
       "name": "harness-powers",
       "source": "./",
-      "description": "Lean harness-native process skills for Claude Code. Only for repos with the repository-harness scaffold installed."
+      "description": "Role-based Harness workflow with durable work/approve task routing, shared mailboxes, review independence, and machine-enforced gates."
     }
   ]
 }

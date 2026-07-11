@@ -141,16 +141,15 @@ Get-ChildItem $scaffold -Recurse -File | ForEach-Object {
 $verb = if ($DryRun) { 'DRY RUN: would copy' } else { 'Scaffold:' }
 Write-Step "$verb $created file(s) created, $skipped already present (skipped)."
 
-# --- 2b. Portable skills for non-Claude CLIs (Codex -> .codex, agy -> .agents) ---
-# Claude Code uses the harness-powers plugin skills; these vendored copies give
-# Codex and agy the same intake -> done procedures. Overwritten on re-init so a new
-# plugin version refreshes them (harness-powers-owned, not your files).
+# --- 2b. Portable runtime skills -----------------------------------------------
+# Overwritten on re-init so a new plugin version refreshes only
+# harness-powers-owned skill directories.
 $portableSkills = Join-Path $root 'portable-skills'
 if (Test-Path $portableSkills) {
     $skN = 0
     Get-ChildItem $portableSkills -Directory | ForEach-Object {
         $name = $_.Name
-        foreach ($base in @('.codex/skills', '.agents/skills')) {
+        foreach ($base in @('.codex/skills', '.agents/skills', '.grok/skills')) {
             $dest = Join-Path $Directory (Join-Path $base $name)
             if ($DryRun) {
                 $skN++
@@ -161,21 +160,33 @@ if (Test-Path $portableSkills) {
             }
         }
     }
-    Write-Step "Portable skills: $skN vendored/refreshed (.codex/skills + .agents/skills)."
+    Write-Step "Portable skills: $skN vendored/refreshed across runtime adapters."
 }
 
-# --- 2c. Remove legacy harness-powers.toml -------------------------------------
-# Older installs vendored a harness-powers.toml of "model hints"; its comments
-# described the retired auto-invoke gates and some CLIs obeyed them, auto-spawning a
-# reviewer. Reviewer/explorer model is now the human's per-pane choice, so the file
-# is obsolete. Delete OUR copy (identified by its header); leave unrelated files.
+# --- 2c. Role/stage workflow reference (harness-powers-owned) ------------------
+$workflowSrc = Join-Path $scaffold 'docs/AGENT_WORKFLOW.md'
+$workflowDest = Join-Path $Directory 'docs/AGENT_WORKFLOW.md'
+if (Test-Path $workflowSrc) {
+    if ($DryRun) {
+        Write-Step 'DRY RUN: would install/refresh docs/AGENT_WORKFLOW.md'
+    } else {
+        New-Item -ItemType Directory -Force (Split-Path $workflowDest) | Out-Null
+        Copy-Item $workflowSrc $workflowDest -Force
+        Write-Step 'Installed/refreshed docs/AGENT_WORKFLOW.md.'
+    }
+}
+
+# --- 2d. Remove legacy harness-powers.toml -------------------------------------
+# Older installs vendored a harness-powers.toml that bound workflow roles to
+# runtime choices. The durable role resolver replaces it. Delete OUR copy
+# (identified by its header); leave unrelated files.
 $legacyToml = Join-Path $Directory 'harness-powers.toml'
 if ((Test-Path $legacyToml) -and ((Get-Content $legacyToml -TotalCount 3) -match 'harness-powers')) {
     if ($DryRun) {
         Write-Step 'DRY RUN: would remove legacy harness-powers.toml (obsolete model-hints file).'
     } else {
         Remove-Item -Force $legacyToml
-        Write-Step 'Removed legacy harness-powers.toml (obsolete; reviewer/explorer model is now a per-pane human choice).'
+        Write-Step 'Removed legacy harness-powers.toml (obsolete runtime bindings).'
     }
 }
 
@@ -220,52 +231,18 @@ if (Test-Path $traceSpec) {
     }
 }
 
-# --- 6. Tool registry: external-review / repo-explore ----------------------------
-function Register-HarnessTool($name, $capability, $responsibility, $description) {
-    $cmd = Get-Command $name -ErrorAction SilentlyContinue
-    if (-not $cmd) {
-        Write-Step "CLI '$name' not on PATH. Skipped registration."
-        return
-    }
-    # Register the resolved path: the Rust CLI's PATH probe does not apply
-    # PATHEXT on Windows, so a bare name like 'codex' fails its existence check.
-    if ($DryRun) { Write-Step "DRY RUN: would register '$name' ($($cmd.Source)) as '$capability'"; return }
-    try {
-        & $cli tool register --name $name --kind cli --capability $capability `
-            --command $cmd.Source --description $description --responsibility $responsibility 2>&1 | ForEach-Object {
-            Write-Step "  $_"
-        }
-        if ($LASTEXITCODE -eq 0) { Write-Step "Registered '$name' -> $capability" }
-        else { Write-Step "Registration of '$name' failed or already exists. Continuing." }
-    } catch {
-        Write-Step "Registration of '$name' errored: $($_.Exception.Message). Continuing."
-    }
-}
-
-if (Test-Path $cli) {
-    Push-Location $Directory
-    try {
-        Register-HarnessTool 'codex' 'external-review' 'Verification' 'GPT reviewer via Codex CLI for plan-review and code-review gates'
-        Register-HarnessTool 'agy' 'repo-explore' 'Context selection' 'Gemini explorer via Antigravity CLI for wide repo scans'
-        if (-not $DryRun) {
-            try { & $cli tool check 2>&1 | ForEach-Object { Write-Step "  $_" } }
-            catch { Write-Step "tool check errored: $($_.Exception.Message). Continuing." }
-        }
-    } finally {
-        Pop-Location
-    }
-}
-
-# --- 7. Hard-gate hooks (plan-review) for Claude / Codex / Grok ------------------
+# --- 6. Shared mailbox helper + hard-gate adapters -----------------------------
 $gateSrc = Join-Path $root 'gate'
 if (Test-Path $gateSrc) {
     $gateBin = Join-Path $Directory '.harness-powers/bin/harness-powers-gate'
+    $workflowBin = Join-Path $Directory '.harness-powers/bin/harness-powers-workflow'
     if ($DryRun) {
-        Write-Step 'DRY RUN: would install/refresh .harness-powers/bin/harness-powers-gate'
+        Write-Step 'DRY RUN: would install/refresh mailbox helper and hard gate'
     } else {
         New-Item -ItemType Directory -Force (Split-Path $gateBin) | Out-Null
         Copy-Item (Join-Path $gateSrc 'harness-powers-gate') $gateBin -Force
-        Write-Step 'Installed/refreshed .harness-powers/bin/harness-powers-gate.'
+        Copy-Item (Join-Path $gateSrc 'harness-powers-workflow') $workflowBin -Force
+        Write-Step 'Installed/refreshed mailbox helper and hard gate.'
     }
 
     function Install-Hook($srcRel, $destRel, $label) {
@@ -286,9 +263,9 @@ if (Test-Path $gateSrc) {
     Install-Hook 'hooks/claude-settings.json' '.claude/settings.json'           'Claude Code'
 
     if (-not $DryRun) {
-        Write-Step 'Hard-gate active: edits to code are blocked until each open normal/high-risk story has a reviewer approval.'
+        Write-Step 'Hard-gate active: edits to code are blocked until each open normal/high-risk story has a "plan-review passed:" reviewer approval.'
         Write-Step 'TRUST REQUIRED: in Codex and Grok run "/hooks-trust" (or launch with --trust) once, or project hooks will NOT execute. On Windows the hook needs bash (git-bash/WSL).'
     }
 }
 
-Write-Step 'Init complete. Commit the scaffold, then start a fresh session (the CLAUDE.md block loads at session start).'
+Write-Step "Init complete. Start a fresh session, then use 'work <description>' or its runtime adapter."

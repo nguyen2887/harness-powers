@@ -1,6 +1,6 @@
 ---
 name: init
-description: Use when your human partner asks to initialize, bootstrap, or set up the harness for a new or existing project (/harness-powers:init) - copies the vendored repository-harness scaffold, installs harness-cli, initializes the durable database, wires the harness-powers pipeline into CLAUDE.md, and registers external review/explore tools. Safe to re-run; never overwrites existing files.
+description: Use when your human partner asks to initialize, bootstrap, or set up the harness for a new or existing project (/harness-powers:init). Install the scaffold, harness-cli, shared task mailbox, role-based workflow, portable skills, and hard gate. Safe to re-run; never overwrites user files.
 ---
 
 # Initialize Harness Project
@@ -18,13 +18,14 @@ Turn the current directory into a harness-powers-ready project in one pass.
 
    If `CLAUDE_PLUGIN_ROOT` is not set in your environment, locate the plugin root by finding this skill's own directory (the plugin root is two levels up from `skills/init/`).
 
-   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli` (vendored `.exe` on Windows; auto-downloaded per-platform from the pinned upstream release on macOS/Linux), creates `harness.db`, appends the pipeline block to `CLAUDE.md` and a portable copy to `AGENTS.md` (both marker-guarded, so Codex/agy/Grok follow the same pipeline), vendors the CLI-agnostic skills into `.codex/skills/` and `.agents/skills/` (Claude Code uses the plugin skills instead), installs the hard-gate script to `.harness-powers/bin/` and wires `PreToolUse` hooks for Claude/Codex/Grok, ensures the lean trace profile note in `docs/TRACE_SPEC.md`, and registers `codex` (external-review) and `agy` (repo-explore) when present on PATH.
+   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli`, creates `harness.db`, installs marker-guarded `CLAUDE.md`/`AGENTS.md` workflow blocks, adds `docs/AGENT_WORKFLOW.md`, vendors portable skills into `.codex/skills/`, `.agents/skills/`, and `.grok/skills/`, installs the shared workflow helper and hard gate, and ensures lean trace. It never binds roles to installed models or CLIs.
 
 2. **Read the script output.** Every line is prefixed `[harness-powers]`. Verify:
    - scaffold files created (or skipped as already present — fine on re-run)
    - `harness.db` initialized
    - CLAUDE.md block present
-   - tool registry shows `present` for available CLIs
+   - `.harness-powers/bin/harness-powers-workflow` is executable
+   - public `work` and `approve` skills are installed for supported runtimes
 
    If any step failed, fix it before proceeding — do not leave a half-initialized project.
 
@@ -33,11 +34,11 @@ Turn the current directory into a harness-powers-ready project in one pass.
 4. **Confirm activation and hand off.** Tell your human partner:
    - the scaffold is in place and committed
    - the pipeline activates on the NEXT session (this session did not load the new CLAUDE.md block; offer to restart, or simply follow the pipeline manually from here)
-   - they can now describe what they want to build — that request enters through `harness-powers:intake`
+   - they can now invoke `work <description>` (or the runtime's slash/skill adapter)
 
 ## Notes
 
 - Only the Windows x64 `harness-cli` binary is vendored. On macOS/Linux the script auto-downloads the matching binary (`macos-arm64`, `macos-x64`, `linux-x64`, `linux-arm64`) from the pinned upstream release and checksum-verifies it. If the machine is offline or `curl` is missing, it warns and points to the upstream releases (https://github.com/hoangnb24/repository-harness/releases) — download the platform binary to `scripts/bin/harness-cli`, `chmod +x` it, and re-run.
-- **Re-running refreshes harness-powers-owned artifacts in place** — the `HARNESS-POWERS` blocks in `CLAUDE.md`/`AGENTS.md` (only the marked block; your surrounding content is preserved), the vendored `.codex/.agents` skills, and the gate script — so a plugin upgrade lands without deleting anything by hand. Your own files (code, docs, `harness.db`) are never overwritten. A legacy `harness-powers.toml` from older installs is removed on re-init — reviewer/explorer model is now a per-pane human choice, and its stale comments could otherwise mislead a CLI into auto-spawning a reviewer. Existing hook-config JSON is left as is (merge the gate hook by hand if it's new to that file).
-- **Hard-gate hooks:** init installs a `PreToolUse` gate that blocks edits to code until each open normal/high-risk story has a reviewer approval (`harness-cli intervention add ... --type approval --source reviewer`, which the designing skill records after the plan-review loop). Codex and Grok require a one-time `/hooks-trust` (or `--trust`) or the hook will not run; on Windows the hook needs bash (git-bash/WSL). The gate is fail-open: no db, no CLI, or a docs-only edit is always allowed.
-- This skill sets up structure only. Do not start designing or implementing the product here — that is `harness-powers:intake`'s job, in response to an actual request.
+- **Re-running refreshes harness-powers-owned artifacts in place** — the marked `CLAUDE.md`/`AGENTS.md` blocks, `docs/AGENT_WORKFLOW.md`, vendored runtime skills, workflow helper, and gate script. User code/docs, `harness.db`, and existing hook JSON are preserved. A legacy harness-powers-owned `harness-powers.toml` is removed because its stale comments could auto-trigger another CLI.
+- **Hard-gate hooks:** init blocks code edits until every open normal/high-risk story has a reviewer approval whose description starts `plan-review passed:`. Codex and Grok require one-time hook trust; on Windows the hook needs bash. The gate is fail-open when no db/CLI is available or the edit is docs-only.
+- This skill sets up structure only. Do not start product work here; that begins through `work` in response to an actual request.
