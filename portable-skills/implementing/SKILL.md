@@ -21,10 +21,13 @@ Own product-code writes for the assigned story and stage only.
 1. Verify the handoff paths. Normal/high-risk work also requires the frozen
    plan, plan-review verdict, and verify command. Tiny work requires its intake
    and context-lite packet; declare the narrow verification command before edits.
-2. Create a branch. Multiple panes may share this checkout because the mailbox
+2. Story-backed work: after confirming plan approval, run
+   `harness-cli story update --id <story> --status in_progress` before any
+   product edit. This preserves gate enforcement if local mailbox state is lost.
+3. Create a branch. Multiple panes may share this checkout because the mailbox
    enforces a single product-code writer; do not create an isolated worktree
    unless the project has explicitly configured a shared Harness control plane.
-3. Record the base commit and run the narrow baseline check. A failing baseline
+4. Record the base commit and run the narrow baseline check. A failing baseline
    enters debugging before product changes.
 
 ## Build

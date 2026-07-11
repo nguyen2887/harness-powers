@@ -263,7 +263,7 @@ if (Test-Path $gateSrc) {
     Install-Hook 'hooks/claude-settings.json' '.claude/settings.json'           'Claude Code'
 
     if (-not $DryRun) {
-        Write-Step 'Hard-gate active: edits to code are blocked until each open normal/high-risk story has a "plan-review passed:" reviewer approval.'
+        Write-Step 'Hard-gate active: code edits for active normal/high-risk tasks require a "plan-review passed:" reviewer approval; dormant planned roadmap stories are ignored.'
         Write-Step 'TRUST REQUIRED: in Codex and Grok run "/hooks-trust" (or launch with --trust) once, or project hooks will NOT execute. On Windows the hook needs bash (git-bash/WSL).'
     }
 }

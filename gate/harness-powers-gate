@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # harness-powers hard gate (PreToolUse hook for Claude Code, Codex, and Grok).
 #
-# Blocks edits to code until the plan-review gate has been recorded for every
-# OPEN normal/high-risk story — i.e. a stage-specific reviewer approval whose
-# description starts with 'plan-review passed:' exists.
-# The signal is objective harness.db state, not something the model must remember.
+# Blocks edits to code until the plan-review gate has been recorded for active
+# normal/high-risk mailbox tasks and in-progress stories. Dormant roadmap stories
+# whose status is merely `planned` do not block unrelated work.
 #
 # Fail-open by design: any uncertainty (no harness.db, no CLI, unparseable input,
 # a whitelisted/non-code path) ALLOWS the edit. It only ever denies when it is
-# certain there is an open, unreviewed normal/high-risk story.
+# certain there is an active, unreviewed normal/high-risk task.
 #
 # Contract: reads the hook JSON payload on stdin; exit 0 = allow, exit 2 = deny
 # (all three CLIs treat exit code 2 as a block and surface stderr to the model).
@@ -58,17 +57,66 @@ cli="$repo/scripts/bin/harness-cli"
 [ -x "$cli" ] || cli="$repo/scripts/bin/harness-cli.exe"
 [ -x "$cli" ] || exit 0
 
-sql_open="SELECT group_concat(s.id, ', ') FROM story s WHERE s.risk_lane IN ('normal','high_risk') AND s.status IN ('planned','in_progress') AND NOT EXISTS (SELECT 1 FROM intervention i WHERE i.story_id = s.id AND i.type='approval' AND i.source='reviewer' AND i.description LIKE 'plan-review passed:%');"
+blockers=""
 
-blockers="$( (cd "$repo" && "$cli" query sql "$sql_open" 2>/dev/null) \
-  | grep -viE 'group_concat|^-+$' | tr -d ' \t' | grep -vE '^$' | head -1 )"
+add_blocker() {
+  local id="$1"
+  [ -n "$id" ] || return
+  case ",$blockers," in *",$id,"*) return ;; esac
+  if [ -n "$blockers" ]; then blockers="$blockers,$id"; else blockers="$id"; fi
+}
 
-# No open, unreviewed normal/high-risk story -> allow.
+has_plan_approval() {
+  local story="$1" raw count
+  case "$story" in ""|*[!A-Za-z0-9._-]*) return 2 ;; esac
+  raw="$(cd "$repo" && "$cli" query sql "SELECT count(*) FROM intervention WHERE story_id='$story' AND type='approval' AND source='reviewer' AND description LIKE 'plan-review passed:%';" 2>/dev/null)" || return 2
+  count="$(printf '%s\n' "$raw" | awk '/^[[:space:]]*[0-9]+[[:space:]]*$/ {gsub(/[[:space:]]/, ""); value=$0} END {print value}')"
+  [ -n "$count" ] || return 2
+  [ "$count" -gt 0 ]
+}
+
+# Mailbox tasks represent work that is actually active. Planned roadmap stories
+# with no open mailbox task are intentionally ignored.
+runtime="$repo/.harness-powers/runtime/tasks"
+if [ -d "$runtime" ]; then
+  for task_dir in "$runtime"/*; do
+    [ -d "$task_dir/fields" ] || continue
+    task="$(basename "$task_dir")"
+    lane="$(sed -n '1p' "$task_dir/fields/lane" 2>/dev/null || true)"
+    stage="$(sed -n '1p' "$task_dir/fields/stage" 2>/dev/null || true)"
+    case "$lane:$stage" in normal:closed|high-risk:closed) continue ;; esac
+    case "$lane" in normal|high-risk) ;; *) continue ;; esac
+    story="$(sed -n '1p' "$task_dir/fields/story_id" 2>/dev/null || true)"
+    if [ -z "$story" ]; then
+      add_blocker "$task"
+      continue
+    fi
+    has_plan_approval "$story"; approval_status=$?
+    case "$approval_status" in
+      0) ;;
+      1) add_blocker "$story" ;;
+      *) exit 0 ;; # uncertain database result -> fail open
+    esac
+  done
+fi
+
+# Fallback for an implementation whose runtime mailbox was lost: in-progress
+# stories remain guarded. Merely planned roadmap stories are not selected.
+sql_in_progress="SELECT group_concat(s.id, ',') FROM story s WHERE s.risk_lane IN ('normal','high_risk') AND s.status='in_progress' AND NOT EXISTS (SELECT 1 FROM intervention i WHERE i.story_id=s.id AND i.type='approval' AND i.source='reviewer' AND i.description LIKE 'plan-review passed:%');"
+raw_in_progress="$(cd "$repo" && "$cli" query sql "$sql_in_progress" 2>/dev/null)" || exit 0
+db_blockers="$(printf '%s\n' "$raw_in_progress" | grep -viE 'group_concat|^-+$' | tr -d ' \t' | grep -vE '^$' | head -1)"
+if [ -n "$db_blockers" ]; then
+  old_ifs="$IFS"; IFS=','
+  for story in $db_blockers; do add_blocker "$story"; done
+  IFS="$old_ifs"
+fi
+
+# No active, unreviewed normal/high-risk task -> allow.
 [ -n "$blockers" ] || exit 0
 
 # Deny: a plan-review gate is outstanding.
 {
-  echo "[harness-powers gate] BLOCKED: plan-review gate not passed for open story(ies): ${blockers}."
+  echo "[harness-powers gate] BLOCKED: plan-review gate not passed for active task/story: ${blockers}."
   echo "Edits outside docs/ are blocked until the plan is reviewed."
   echo "Continue the durable task with: work <task-id>"
   echo "After plan review and freeze, the human unlocks it with: approve <task-id>"

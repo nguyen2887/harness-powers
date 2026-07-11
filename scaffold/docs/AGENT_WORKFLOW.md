@@ -75,6 +75,11 @@ collapses artifacts or bypasses a review/human gate.
 During build, run targeted Red/Green checks only. `verify` runs the official
 acceptance and broader checks once against the final working tree.
 
+Before the first story-backed product edit, implementation marks the story
+`in_progress`. The hard gate checks open normal/high-risk mailbox tasks plus
+unapproved `in_progress` stories; dormant roadmap stories that are only
+`planned` never block unrelated work.
+
 Every task defaults to `review_policy: required`. Context may set
 `skip-mechanical` only when all are true: lane is tiny, no executable behavior
 changes, no risk flag exists, and deterministic mechanical proof is sufficient.

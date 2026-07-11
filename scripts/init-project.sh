@@ -273,7 +273,7 @@ if [ -d "$GATE_SRC" ]; then
   install_hook "hooks/claude-settings.json" ".claude/settings.json"           "Claude Code"
 
   if [ "$DRY_RUN" != "--dry-run" ]; then
-    step "Hard-gate active: edits to code are blocked until each open normal/high-risk story has a 'plan-review passed:' reviewer approval."
+    step "Hard-gate active: code edits for active normal/high-risk tasks require a 'plan-review passed:' reviewer approval; dormant planned roadmap stories are ignored."
     step "TRUST REQUIRED: in Codex and Grok run '/hooks-trust' (or launch with --trust) once, or project hooks will NOT execute."
   fi
 fi

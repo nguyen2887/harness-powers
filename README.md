@@ -86,9 +86,11 @@ Tiny mechanical work with no executable behavior change or risk flags may use
 
 The installer delivers the same policy through marker-guarded repository
 instructions, vendored portable skills, runtime hook adapters, and one hard-gate
-script. The gate reads `harness.db` and blocks code edits for open normal or
-high-risk stories until a reviewer approval begins `plan-review passed:`. The
-human freeze is recorded separately as `human-freeze approved:`.
+script. The gate blocks code edits for active normal/high-risk mailbox tasks and
+unapproved `in_progress` stories until a reviewer approval begins
+`plan-review passed:`. Dormant roadmap stories that are merely `planned` do not
+block unrelated work. The human freeze is recorded separately as
+`human-freeze approved:`.
 
 Verification, judgment, reconciliation, and close are separate. Only `done` may
 claim completion. Merge, push, PR, and deployment remain explicit human choices.

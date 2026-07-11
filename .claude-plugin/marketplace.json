@@ -1,5 +1,6 @@
 {
   "name": "harness-powers",
+  "description": "Role-based Harness workflow plugins for durable, review-gated AI development.",
   "owner": {
     "name": "nguyen tran"
   },
