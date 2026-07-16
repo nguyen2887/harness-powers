@@ -1,0 +1,158 @@
+#!/usr/bin/env bash
+# Read-only installation and activation check for a Harness checkout.
+set -u
+
+pass_n=0
+warn_n=0
+fail_n=0
+
+pass() { pass_n=$((pass_n + 1)); printf 'PASS  %s\n' "$*"; }
+warn() { warn_n=$((warn_n + 1)); printf 'WARN  %s\n' "$*"; }
+fail() { fail_n=$((fail_n + 1)); printf 'FAIL  %s\n' "$*"; }
+
+find_root() {
+  local d="${HARNESS_REPO_ROOT:-$PWD}"
+  while [ "$d" != "/" ] && [ "$d" != "." ]; do
+    if [ -f "$d/docs/HARNESS.md" ] && [ -d "$d/.harness-powers" ]; then
+      printf '%s\n' "$d"
+      return 0
+    fi
+    d="$(dirname "$d")"
+  done
+  return 1
+}
+
+ROOT="$(find_root 2>/dev/null || true)"
+if [ -z "$ROOT" ]; then
+  fail "Harness root not found; run from the initialized wrapper checkout"
+  printf '\nSummary: %s pass, %s warn, %s fail\n' "$pass_n" "$warn_n" "$fail_n"
+  exit 1
+fi
+
+printf 'Harness doctor\nroot: %s\n\n' "$ROOT"
+[ "$PWD" = "$ROOT" ] && pass "launched from wrapper root" || warn "cwd is not wrapper root: $PWD"
+
+check_file() {
+  local rel="$1"
+  [ -f "$ROOT/$rel" ] && pass "$rel present" || fail "$rel missing"
+}
+
+check_exec() {
+  local rel="$1"
+  [ -x "$ROOT/$rel" ] && pass "$rel executable" || fail "$rel missing or not executable"
+}
+
+check_file AGENTS.md
+check_file CLAUDE.md
+check_file docs/AGENT_WORKFLOW.md
+check_exec .harness-powers/bin/harness-powers-workflow
+check_exec .harness-powers/bin/harness-powers-gate
+if [ -x "$ROOT/scripts/bin/harness-cli" ]; then
+  pass "scripts/bin/harness-cli executable"
+else
+  fail "scripts/bin/harness-cli missing; run harness-powers:init from the installed plugin"
+fi
+[ -f "$ROOT/harness.db" ] && pass "harness.db present" || \
+  fail "harness.db missing; run harness-powers:init, then restore/import durable records as intended"
+
+for file in AGENTS.md CLAUDE.md; do
+  begin="$(grep -c 'HARNESS-POWERS:BEGIN' "$ROOT/$file" 2>/dev/null || true)"
+  end="$(grep -c 'HARNESS-POWERS:END' "$ROOT/$file" 2>/dev/null || true)"
+  [ "$begin:$end" = "1:1" ] && pass "$file has one managed workflow block" || \
+    fail "$file managed block count is begin=$begin end=$end"
+done
+
+for rel in \
+  .agents/skills/work/SKILL.md \
+  .agents/skills/approve/SKILL.md \
+  .agents/skills/pause/SKILL.md \
+  .agents/skills/doctor/SKILL.md \
+  .claude/skills/work/SKILL.md \
+  .claude/skills/pause/SKILL.md \
+  .claude/skills/doctor/SKILL.md \
+  .codex/hooks.json \
+  .grok/hooks/harness-powers.json \
+  .claude/settings.json; do
+  check_file "$rel"
+done
+
+if [ -d "$ROOT/.codex/skills" ] && find "$ROOT/.codex/skills" -mindepth 2 -maxdepth 2 -name SKILL.md -print -quit 2>/dev/null | grep -q .; then
+  warn ".codex/skills still contains repo skills; Codex also scans .agents/skills and may show duplicates"
+else
+  pass "Codex uses the single portable .agents/skills source"
+fi
+
+grok_duplicates=""
+for name in work approve context designing reviewing implementing verifying debugging done intake pause doctor; do
+  [ -f "$ROOT/.grok/skills/$name/SKILL.md" ] || continue
+  if [ -n "$grok_duplicates" ]; then grok_duplicates="$grok_duplicates,$name"
+  else grok_duplicates="$name"
+  fi
+done
+if [ -n "$grok_duplicates" ]; then
+  warn ".grok/skills shadows shared .agents skills: $grok_duplicates; re-run harness-powers:init"
+else
+  pass "Grok discovers shared workflow skills from .agents/skills without shadow copies"
+fi
+
+if command -v sqlite3 >/dev/null 2>&1 && [ -f "$ROOT/harness.db" ]; then
+  integrity="$(sqlite3 "$ROOT/harness.db" 'pragma integrity_check;' 2>/dev/null || true)"
+  [ "$integrity" = ok ] && pass "harness.db integrity_check=ok" || fail "harness.db integrity check failed"
+else
+  warn "sqlite3 unavailable; database integrity not checked"
+fi
+
+codex_config="${CODEX_HOME:-$HOME/.codex}/config.toml"
+if command -v codex >/dev/null 2>&1 && [ -f "$ROOT/.codex/hooks.json" ]; then
+  if [ -f "$codex_config" ] && awk -v root="$ROOT" '
+    $0 == "[projects.\"" root "\"]" { inside=1; next }
+    /^\[/ { inside=0 }
+    inside && /trust_level[[:space:]]*=[[:space:]]*"trusted"/ { found=1 }
+    END { exit(found ? 0 : 1) }
+  ' "$codex_config"; then
+    pass "Codex project trust recorded for this path"
+  else
+    warn "Codex installed but exact project trust was not found; verify project hooks before edits"
+  fi
+fi
+
+grok_store="$HOME/.grok/trusted_folders.toml"
+if command -v grok >/dev/null 2>&1 && [ -f "$ROOT/.grok/hooks/harness-powers.json" ]; then
+  grok_trusted=no
+  if [ -f "$grok_store" ]; then
+    while IFS= read -r folder; do
+      case "$ROOT/" in "$folder/"*) grok_trusted=yes; break ;; esac
+    done < <(awk '
+      /^\[folders\."/ {
+        folder=$0
+        sub(/^\[folders\."/, "", folder)
+        sub(/"\]$/, "", folder)
+        next
+      }
+      /^[[:space:]]*trusted[[:space:]]*=[[:space:]]*true/ && folder != "" { print folder }
+    ' "$grok_store")
+  fi
+  [ "$grok_trusted" = yes ] && pass "Grok folder trust covers this path" || \
+    warn "Grok project is not trusted; launch a real session with: grok --trust"
+fi
+
+claude_local="$ROOT/.claude/settings.local.json"
+if command -v claude >/dev/null 2>&1; then
+  if [ -f "$claude_local" ] && grep -q 'harness-powers@harness-powers' "$claude_local"; then
+    pass "Claude harness-powers local enablement present"
+  else
+    warn "Claude installed but local harness-powers enablement was not found"
+  fi
+fi
+
+if [ -x "$ROOT/.harness-powers/bin/harness-powers-workflow" ] && [ -f "$ROOT/harness.db" ]; then
+  active="$(cd "$ROOT" && .harness-powers/bin/harness-powers-workflow list 2>/dev/null | awk '$2 != "closed"')"
+  if [ -n "$active" ]; then
+    printf '\nActive tasks:\n%s\n' "$active"
+  else
+    printf '\nActive tasks: none\n'
+  fi
+fi
+
+printf '\nSummary: %s pass, %s warn, %s fail\n' "$pass_n" "$warn_n" "$fail_n"
+[ "$fail_n" -eq 0 ]

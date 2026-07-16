@@ -91,6 +91,9 @@ cmd_create() {
   write_field "$task" artifact_author ""
   write_field "$task" reviewer_actor ""
   write_field "$task" review_independence ""
+  write_field "$task" checkpoint_artifact ""
+  write_field "$task" checkpoint_actor ""
+  write_field "$task" checkpoint_at ""
   write_field "$task" sequence 0
   printf '%s\n' "$task"
 }
@@ -103,7 +106,7 @@ cmd_show() {
   [ -f "$d/owner" ] && owner="$(sed -n '1p' "$d/owner")"
   [ -f "$d/expires" ] && expires="$(sed -n '1p' "$d/expires")"
   printf 'task_id: %s\n' "$task"
-  for f in lane intake_id story_id stage status required_role review_policy latest_artifact artifact_author reviewer_actor review_independence summary; do
+  for f in lane intake_id story_id stage status required_role review_policy latest_artifact artifact_author reviewer_actor review_independence checkpoint_artifact checkpoint_actor checkpoint_at summary; do
     printf '%s: %s\n' "$f" "$(read_field "$task" "$f")"
   done
   printf 'claimed_by: %s\nclaim_expires: %s\n' "$owner" "$expires"
@@ -111,15 +114,39 @@ cmd_show() {
 
 cmd_claim() {
   [ "$#" -ge 2 ] || die "usage: claim <task-id> <actor-id> [--allow-self]"
-  local task="$1" actor="$2" allow_self="${3:-}" stage author d now expires
+  local task="$1" actor="$2" allow_self="${3:-}" stage author d now expires owner owner_pid recovered=""
   require_task "$task"; stage="$(read_field "$task" stage)"
   [ "$stage" != "human-freeze" ] || die "task '$task' awaits explicit human approval"
   [ "$stage" != "closed" ] || die "task '$task' is closed"
   d="$(claim_dir "$task")"; now="$(date +%s)"
   if [ -d "$d" ]; then
     expires="$(sed -n '1p' "$d/expires" 2>/dev/null || echo 0)"
-    if [ "${expires:-0}" -le "$now" ]; then rm -rf "$d"; else
-      die "stage already claimed by $(sed -n '1p' "$d/owner" 2>/dev/null || echo unknown) until $expires"
+    owner="$(sed -n '1p' "$d/owner" 2>/dev/null || echo unknown)"
+    if [ "$owner" = "$actor" ]; then
+      printf '%s\n' "$((now + LEASE_SECONDS))" > "$d/expires.tmp.$$"
+      mv "$d/expires.tmp.$$" "$d/expires"
+      printf 'claimed: %s\nstage: %s\nrequired_role: %s\nreused_claim: true\n' \
+        "$actor" "$stage" "$(read_field "$task" required_role)"
+      return 0
+    elif [ "${expires:-0}" -le "$now" ]; then
+      recovered="$owner"
+      rm -rf "$d"
+    else
+      owner_pid="${owner##*-ppid-}"
+      case "$owner" in
+        "$(hostname 2>/dev/null || echo host)"-*)
+          case "$owner_pid" in
+            ""|*[!0-9]*) ;;
+            *)
+              if ! kill -0 "$owner_pid" 2>/dev/null; then
+                recovered="$owner"
+                rm -rf "$d"
+              fi
+              ;;
+          esac
+          ;;
+      esac
+      [ ! -d "$d" ] || die "stage already claimed by $owner until $expires"
     fi
   fi
   mkdir "$d" 2>/dev/null || die "stage claim raced; try again"
@@ -141,6 +168,7 @@ cmd_claim() {
   esac
   write_field "$task" status in-progress
   printf 'claimed: %s\nstage: %s\nrequired_role: %s\n' "$actor" "$stage" "$(read_field "$task" required_role)"
+  [ -z "$recovered" ] || printf 'recovered_claim: %s\n' "$recovered"
 }
 
 cmd_artifact() {
@@ -192,11 +220,34 @@ cmd_advance() {
   case "$expected" in plan-review|code-review) write_field "$task" reviewer_actor "$actor" ;; esac
   write_field "$task" stage "$next"
   write_field "$task" required_role "$role"
+  write_field "$task" checkpoint_artifact ""
+  write_field "$task" checkpoint_actor ""
+  write_field "$task" checkpoint_at ""
   if [ "$next" = closed ]; then write_field "$task" status closed
   else write_field "$task" status ready
   fi
   rm -rf "$d"
   printf 'task_id: %s\nstage: %s\nrequired_role: %s\nartifact: %s\n' "$task" "$next" "$role" "$artifact"
+}
+
+cmd_pause() {
+  [ "$#" -eq 3 ] || die "usage: pause <task-id> <actor-id> <checkpoint-artifact>"
+  local task="$1" actor="$2" artifact="$3" d owner abs now
+  require_task "$task"; d="$(claim_dir "$task")"
+  owner="$(sed -n '1p' "$d/owner" 2>/dev/null || true)"
+  [ "$owner" = "$actor" ] || die "actor '$actor' does not hold the task claim"
+  case "$artifact" in
+    .harness-powers/runtime/tasks/"$task"/handoffs/*) ;;
+    *) die "checkpoint artifact must live in this task's mailbox" ;;
+  esac
+  abs="$REPO/$artifact"; [ -s "$abs" ] || die "checkpoint artifact '$artifact' is missing or empty"
+  now="$(date +%s)"
+  write_field "$task" checkpoint_artifact "$artifact"
+  write_field "$task" checkpoint_actor "$actor"
+  write_field "$task" checkpoint_at "$now"
+  release_claim "$task"
+  printf 'task_id: %s\nstage: %s\ncheckpoint_artifact: %s\nstatus: ready\n' \
+    "$task" "$(read_field "$task" stage)" "$artifact"
 }
 
 cmd_set_story() {
@@ -285,7 +336,7 @@ cmd_list() {
   done
 }
 
-cmd="${1:-}"; [ -n "$cmd" ] || die "commands: actor create show claim renew artifact advance set-story set-review-policy next-action approve release list"
+cmd="${1:-}"; [ -n "$cmd" ] || die "commands: actor create show claim renew artifact advance pause set-story set-review-policy next-action approve release list"
 shift || true
 case "$cmd" in
   actor) actor_id ;;
@@ -295,6 +346,7 @@ case "$cmd" in
   renew) cmd_renew "$@" ;;
   artifact) cmd_artifact "$@" ;;
   advance) cmd_advance "$@" ;;
+  pause) cmd_pause "$@" ;;
   set-story) cmd_set_story "$@" ;;
   set-review-policy) cmd_set_review_policy "$@" ;;
   next-action) cmd_next_action "$@" ;;

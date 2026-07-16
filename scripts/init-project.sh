@@ -157,12 +157,29 @@ step "Scaffold: $created file(s) created, $skipped already present (skipped)."
 # Overwritten on re-init so a new plugin version refreshes only
 # harness-powers-owned skill directories.
 PORTABLE_SKILLS="$ROOT/portable-skills"
+is_harness_skill_dir() {
+  local dir="$1"
+  [ -f "$dir/SKILL.md" ] && grep -Eqi 'Harness|harness-powers|\.harness-powers|durable mailbox' "$dir/SKILL.md"
+}
 if [ -d "$PORTABLE_SKILLS" ]; then
-  sk_n=0
+  sk_n=0; legacy_n=0
   for src in "$PORTABLE_SKILLS"/*/; do
     [ -d "$src" ] || continue
     name="$(basename "$src")"
-    for base in ".codex/skills" ".agents/skills" ".grok/skills"; do
+    for legacy_base in ".codex/skills" ".grok/skills"; do
+      legacy_dir="$DIRECTORY/$legacy_base/$name"
+      if [ -d "$legacy_dir" ]; then
+        if ! is_harness_skill_dir "$legacy_dir"; then
+          step "WARNING: preserving unrecognized $legacy_base/$name; it may shadow the shared Harness skill."
+        elif [ "$DRY_RUN" = "--dry-run" ]; then
+          legacy_n=$((legacy_n + 1))
+        else
+          rm -rf "$legacy_dir"
+          legacy_n=$((legacy_n + 1))
+        fi
+      fi
+    done
+    for base in ".agents/skills" ".claude/skills"; do
       dest="$DIRECTORY/$base/$name"
       if [ "$DRY_RUN" = "--dry-run" ]; then
         sk_n=$((sk_n + 1))
@@ -173,7 +190,7 @@ if [ -d "$PORTABLE_SKILLS" ]; then
       fi
     done
   done
-  step "Portable skills: $sk_n vendored/refreshed across runtime adapters."
+  step "Portable skills: $sk_n vendored/refreshed across runtime adapters; $legacy_n redundant .codex/.grok skill dir(s) removed."
 fi
 
 # --- 2c. Role/stage workflow reference (harness-powers-owned) ------------------
@@ -245,15 +262,18 @@ GATE_SRC="$ROOT/gate"
 if [ -d "$GATE_SRC" ]; then
   gate_bin="$DIRECTORY/.harness-powers/bin/harness-powers-gate"
   workflow_bin="$DIRECTORY/.harness-powers/bin/harness-powers-workflow"
+  doctor_bin="$DIRECTORY/.harness-powers/bin/harness-powers-doctor"
   if [ "$DRY_RUN" = "--dry-run" ]; then
     step "DRY RUN: would install/refresh mailbox helper and hard gate"
   else
     mkdir -p "$(dirname "$gate_bin")"
     cp "$GATE_SRC/harness-powers-gate" "$gate_bin"
     cp "$GATE_SRC/harness-powers-workflow" "$workflow_bin"
+    cp "$GATE_SRC/harness-powers-doctor" "$doctor_bin"
     chmod 755 "$gate_bin"
     chmod 755 "$workflow_bin"
-    step "Installed/refreshed mailbox helper and hard gate."
+    chmod 755 "$doctor_bin"
+    step "Installed/refreshed mailbox helper, doctor, and hard gate."
   fi
 
   install_hook() { # $1 src rel, $2 dest rel, $3 label

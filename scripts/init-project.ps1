@@ -147,9 +147,23 @@ Write-Step "$verb $created file(s) created, $skipped already present (skipped)."
 $portableSkills = Join-Path $root 'portable-skills'
 if (Test-Path $portableSkills) {
     $skN = 0
+    $legacyN = 0
     Get-ChildItem $portableSkills -Directory | ForEach-Object {
         $name = $_.Name
-        foreach ($base in @('.codex/skills', '.agents/skills', '.grok/skills')) {
+        foreach ($legacyBase in @('.codex/skills', '.grok/skills')) {
+            $legacyDir = Join-Path $Directory (Join-Path $legacyBase $name)
+            if (Test-Path $legacyDir) {
+                $skillFile = Join-Path $legacyDir 'SKILL.md'
+                $isHarnessOwned = (Test-Path $skillFile) -and [bool](Select-String -Path $skillFile -Pattern 'Harness|harness-powers|\.harness-powers|durable mailbox' -Quiet)
+                if (-not $isHarnessOwned) {
+                    Write-Step "WARNING: preserving unrecognized $legacyBase/$name; it may shadow the shared Harness skill."
+                } else {
+                    $legacyN++
+                    if (-not $DryRun) { Remove-Item -Recurse -Force $legacyDir }
+                }
+            }
+        }
+        foreach ($base in @('.agents/skills', '.claude/skills')) {
             $dest = Join-Path $Directory (Join-Path $base $name)
             if ($DryRun) {
                 $skN++
@@ -160,7 +174,7 @@ if (Test-Path $portableSkills) {
             }
         }
     }
-    Write-Step "Portable skills: $skN vendored/refreshed across runtime adapters."
+    Write-Step "Portable skills: $skN vendored/refreshed across runtime adapters; $legacyN redundant .codex/.grok skill dir(s) removed."
 }
 
 # --- 2c. Role/stage workflow reference (harness-powers-owned) ------------------
@@ -236,13 +250,15 @@ $gateSrc = Join-Path $root 'gate'
 if (Test-Path $gateSrc) {
     $gateBin = Join-Path $Directory '.harness-powers/bin/harness-powers-gate'
     $workflowBin = Join-Path $Directory '.harness-powers/bin/harness-powers-workflow'
+    $doctorBin = Join-Path $Directory '.harness-powers/bin/harness-powers-doctor'
     if ($DryRun) {
         Write-Step 'DRY RUN: would install/refresh mailbox helper and hard gate'
     } else {
         New-Item -ItemType Directory -Force (Split-Path $gateBin) | Out-Null
         Copy-Item (Join-Path $gateSrc 'harness-powers-gate') $gateBin -Force
         Copy-Item (Join-Path $gateSrc 'harness-powers-workflow') $workflowBin -Force
-        Write-Step 'Installed/refreshed mailbox helper and hard gate.'
+        Copy-Item (Join-Path $gateSrc 'harness-powers-doctor') $doctorBin -Force
+        Write-Step 'Installed/refreshed mailbox helper, doctor, and hard gate.'
     }
 
     function Install-Hook($srcRel, $destRel, $label) {

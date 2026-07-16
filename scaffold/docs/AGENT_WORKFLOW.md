@@ -5,11 +5,15 @@ stages, panes, providers, and models are execution details.
 
 ```text
 work <description>   create and start a task
+work                 resume the sole active task, or list choices
 work <task-id>       claim and continue the task's current stage
 approve <task-id>    explicit human freeze after an approved plan review
+pause <task-id>      checkpoint the current stage and release its claim
+doctor               inspect installation, activation, trust, and active tasks
 ```
 
-Slash-capable runtimes may expose those as `/work` and `/approve` (possibly
+Slash-capable runtimes may expose those as `/work`, `/approve`, `/pause`, and
+`/doctor` (possibly
 namespaced). Skill-capable runtimes may expose `$work`. Plain text is the
 portable fallback. The human never needs to name the next role or copy a packet.
 
@@ -106,6 +110,23 @@ An actor must:
 
 Chat is not durable workflow state. Do not reconstruct a stage from memory or
 ask the human to ferry context between panes.
+
+## Interruption Recovery
+
+Stage completion remains the preferred handoff boundary. For a deliberate
+mid-stage switch, `pause <task-id>` writes a separate checkpoint containing the
+current stage, base commit, dirty working trees, completed and pending work,
+commands, failures, and risks, then releases the claim without advancing.
+
+On resume, `work` reads both the latest completed artifact and checkpoint. It
+inspects the wrapper and affected nested Git working trees before changing
+anything, preserving unexplained partial work. An expired claim is recoverable.
+For a local claim whose recorded process no longer exists, the helper may recover
+the dead owner early; a live owner continues to block concurrent writers.
+
+With no task argument, `work` resumes the sole non-closed task. If several tasks
+are active it lists their stage, status, and required role and asks only for the
+task id. If none are active it asks for a new description.
 
 ## Review Contract
 

@@ -37,6 +37,8 @@ This repo uses a durable, role-based Harness stage machine. Read
 
 Messages beginning with `/work` or `work` MUST use the `work` skill/resolver.
 Messages beginning with `/approve` or `approve` MUST use the `approve` skill.
+Messages beginning with `/pause` or `pause` MUST use the `pause` skill.
+Messages beginning with `/doctor` or `doctor` MUST use the read-only `doctor` skill.
 The human supplies a description or task id, never a role, model, provider, pane,
 or stage. Resolve those from `.harness-powers/runtime/tasks/`.
 
@@ -63,5 +65,6 @@ independent code review.
 
 Detailed procedures live in the installed skills. If this runtime does not
 support slash or skill invocation, plain `work <description-or-task-id>` and
-`approve <task-id>` are the portable entrypoints.
+`approve <task-id>` are the portable entrypoints. Use `pause <task-id>` before
+switching sessions during a stage; a new session resumes with `work <task-id>`.
 <!-- HARNESS-POWERS:END -->

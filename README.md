@@ -41,6 +41,8 @@ The internal skills are:
 | --- | --- |
 | `work` | resolve task state, claim the current stage, dispatch one procedure |
 | `approve` | record the explicit human freeze |
+| `pause` | checkpoint interrupted stage state and release its claim |
+| `doctor` | inspect installation, trust, hooks, skills, DB, and active tasks |
 | `intake` | classify lane and persist the request |
 | `context` | collect grounded, read-only repository evidence |
 | `designing` | own contract, design, plan, and freeze reconciliation |
@@ -65,6 +67,11 @@ This removes manual copy/paste between panes. One session can run the whole flow
 or multiple sessions can take successive claims. Plan and code review prefer a
 session independent from the artifact author. Explicit self-review is supported
 only as a recorded degraded-independence mode.
+
+For a deliberate mid-stage switch, `pause <task-id>` persists dirty-tree and
+progress evidence without advancing. `work <task-id>` resumes it in another
+session. Dead local claim owners are recoverable; live owners remain protected.
+Plain `work` resumes the sole active task or lists choices when several exist.
 
 The durable machine remains granular, but one invocation commonly executes:
 
@@ -119,9 +126,13 @@ Init also:
 
 1. creates the vendored scaffold when files are missing;
 2. installs the pinned `harness-cli` and initializes `harness.db`;
-3. vendors portable skills into `.codex/skills/`, `.agents/skills/`, and
-   `.grok/skills/`;
-4. installs the shared mailbox helper and plan gate;
+3. vendors portable skills into `.agents/skills/` and `.claude/skills/`; Codex
+   and Grok discover the shared `.agents/skills/` source, while Claude gets its
+   native repo-local adapter; redundant Harness-owned `.codex/skills/` and
+   `.grok/skills/` copies are removed when their Harness ownership is
+   recognizable; unrecognized runtime-specific overrides are preserved and
+   surfaced by doctor;
+4. installs the shared mailbox helper, doctor, and plan gate;
 5. wires hook adapters when their config files do not already exist.
 
 The installer deliberately does not register specific CLIs or bind roles to
@@ -138,7 +149,7 @@ verification during init.
 
 ```text
 .claude-plugin/   plugin metadata
-skills/           plugin skills, including public work/approve entrypoints
+skills/           plugin skills, including public work/approve/pause/doctor entrypoints
 portable-skills/  runtime-neutral copies vendored by init
 gate/             mailbox helper, hard gate, and hook adapters
 scaffold/         repository-harness template

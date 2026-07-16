@@ -14,17 +14,29 @@
 
 payload="$(cat 2>/dev/null || true)"
 
-# Extract the first string value for any of the pipe-separated key names.
-json_str() {
+# Extract string values for any of the pipe-separated key names.
+json_strs() {
   printf '%s' "$payload" \
     | grep -oE "\"($1)\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" \
-    | head -1 \
     | sed -E 's/.*:[[:space:]]*"([^"]*)".*/\1/'
 }
 
-tool="$(json_str 'tool_name|toolName')"
-file="$(json_str 'file_path|filePath|path')"
-root="$(json_str 'workspaceRoot|workspace_root|cwd|projectDir')"
+tool="$(json_strs 'tool_name|toolName' | head -1)"
+files="$(json_strs 'file_path|filePath|path')"
+root="$(json_strs 'workspaceRoot|workspace_root|cwd|projectDir' | head -1)"
+
+# Codex apply_patch carries target paths inside one JSON-escaped patch string,
+# not in file_path. Decode escaped newlines only far enough to read every patch
+# header. Multiple targets matter: a docs-first patch must not hide a code edit.
+patch_files="$(printf '%s' "$payload" \
+  | sed 's/\\n/\
+/g' \
+  | sed -nE 's/^\*\*\* (Add|Update|Delete) File: (.*)$/\2/p')"
+if [ -n "$patch_files" ]; then
+  if [ -n "$files" ]; then files="$(printf '%s\n%s' "$files" "$patch_files")"
+  else files="$patch_files"
+  fi
+fi
 
 # Only guard edit-like tools. Anything else is allowed outright.
 case "$tool" in
@@ -33,10 +45,12 @@ case "$tool" in
 esac
 
 # Without a file target there is nothing to reason about.
-[ -n "$file" ] || exit 0
+[ -n "$files" ] || exit 0
 
 # Locate the harness repo (the directory holding harness.db).
-start="$root"; [ -n "$start" ] || start="$(dirname "$file")"
+first_file="$(printf '%s\n' "$files" | head -1)"
+case "$first_file" in /*) ;; *) first_file="${root:-$PWD}/$first_file" ;; esac
+start="$root"; [ -n "$start" ] || start="$(dirname "$first_file")"
 repo=""; d="$start"
 while [ -n "$d" ] && [ "$d" != "/" ] && [ "$d" != "." ]; do
   if [ -f "$d/harness.db" ]; then repo="$d"; break; fi
@@ -46,11 +60,19 @@ done
 
 # Whitelist: docs, harness bookkeeping, and agent config are always allowed
 # (designing writes story docs before the review; config is not product code).
-rel="${file#"$repo"/}"
-case "$rel" in
-  docs/*|.harness-powers/*|harness.db*|.codex/*|.agents/*|.claude/*|.grok/*) exit 0 ;;
-  *.md) exit 0 ;;
-esac
+# Continue to gate evaluation when ANY target is product code.
+guarded_target=no
+while IFS= read -r file; do
+  [ -n "$file" ] || continue
+  case "$file" in /dev/null) continue ;; esac
+  case "$file" in /*) ;; *) file="${root:-$repo}/$file" ;; esac
+  case "$file" in "$repo"/*) rel="${file#"$repo"/}" ;; *) continue ;; esac
+  case "$rel" in
+    docs/*|.harness-powers/*|harness.db*|.codex/*|.agents/*|.claude/*|.grok/*|*.md) ;;
+    *) guarded_target=yes ;;
+  esac
+done <<< "$files"
+[ "$guarded_target" = yes ] || exit 0
 
 # Need the CLI to inspect state; if it is missing we cannot check -> allow.
 cli="$repo/scripts/bin/harness-cli"

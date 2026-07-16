@@ -5,29 +5,47 @@ description: Use when the human invokes /work, says work with a task, starts a n
 
 # Work Resolver
 
-The human supplies a description or task id. Resolve everything else.
+The human may supply a description, a task id, or no argument. Resolve everything else.
 
 ## Runtime
 
 Use `.harness-powers/bin/harness-powers-workflow` as `workflow`. Call
 `workflow actor` once and reuse that actor id for the entire invocation.
 
+Before resolving work, require executable `workflow`, executable
+`scripts/bin/harness-cli`, and `harness.db`. If any is missing, run
+`.harness-powers/bin/harness-powers-doctor` when available and stop with its
+bootstrap action. Do not edit product code while the hard gate is fail-open.
+
+With no argument, run `workflow list` and consider only non-closed tasks. Resume
+the sole active task automatically. If none exist, ask for a description. If
+several exist, list task id, stage, status, and required role and ask only which
+task to resume.
+
 For a new description, follow `intake`, create `I-<intake-id>`, and execute its
-`context` stage. For an existing id, begin from `workflow show <task-id>`. A
-missing id matching `I-<number>` is an error, not a new description.
+`context` stage. For an existing id, begin from `workflow show <task-id>`. Read
+both `latest_artifact` and any `checkpoint_artifact`. A missing id matching
+`I-<number>` is an error, not a new description.
 
 ## Execution Loop
 
 For each stage:
 
 1. Show state and capture `stage`, `required_role`, `review_policy`, and latest artifact.
-2. Claim it with `workflow claim <task> <actor>`.
+2. Claim it with `workflow claim <task> <actor>` and capture whether a dead or
+   expired owner was recovered.
 3. For review authored by this actor, require another session or explicit
    degraded self-review before retrying with `--allow-self`.
 4. Create a mailbox artifact and execute the mapped internal skill.
 5. Increment stage/debug counters and run
    `workflow next-action <task> <previous-stage> <previous-role> <stages-run> <debug-runs>`.
    Obey its `continue` or `stop` result.
+
+If a checkpoint exists or claim recovery occurred, perform an interrupted-work
+preflight before stage work: read the checkpoint and latest completed artifact,
+inspect the wrapper and affected nested Git working trees, compare partial
+changes with the frozen plan and base commit, and state what will be preserved,
+completed, or redone. Never discard unexplained dirty work.
 
 | Stage | Internal skill |
 | --- | --- |

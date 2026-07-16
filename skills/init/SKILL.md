@@ -18,14 +18,15 @@ Turn the current directory into a harness-powers-ready project in one pass.
 
    If `CLAUDE_PLUGIN_ROOT` is not set in your environment, locate the plugin root by finding this skill's own directory (the plugin root is two levels up from `skills/init/`).
 
-   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli`, creates `harness.db`, installs marker-guarded `CLAUDE.md`/`AGENTS.md` workflow blocks, adds `docs/AGENT_WORKFLOW.md`, vendors portable skills into `.codex/skills/`, `.agents/skills/`, and `.grok/skills/`, installs the shared workflow helper and hard gate, and ensures lean trace. It never binds roles to installed models or CLIs.
+   The script is idempotent and merge-safe: it git-inits if needed, copies only missing scaffold files, installs `harness-cli`, creates `harness.db`, installs marker-guarded `CLAUDE.md`/`AGENTS.md` workflow blocks, adds `docs/AGENT_WORKFLOW.md`, vendors portable skills into `.agents/skills/` and `.claude/skills/`, removes redundant recognizable Harness-owned `.codex/skills/` and `.grok/skills/` copies, installs the shared workflow helper, doctor, and hard gate, and ensures lean trace. Codex and Grok discover the shared `.agents/skills/` source; Claude uses the repo-local native adapter, so runtime behavior does not depend on a cached plugin version. Unrecognized runtime-specific overrides are preserved and reported rather than deleted. It never binds roles to installed models or CLIs.
 
 2. **Read the script output.** Every line is prefixed `[harness-powers]`. Verify:
    - scaffold files created (or skipped as already present — fine on re-run)
    - `harness.db` initialized
    - CLAUDE.md block present
    - `.harness-powers/bin/harness-powers-workflow` is executable
-   - public `work` and `approve` skills are installed for supported runtimes
+   - `.harness-powers/bin/harness-powers-doctor` is executable
+   - public `work`, `approve`, `pause`, and `doctor` skills are installed for supported runtimes
 
    If any step failed, fix it before proceeding — do not leave a half-initialized project.
 
