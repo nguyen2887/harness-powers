@@ -1,7 +1,7 @@
 {
   "name": "harness-powers",
-  "description": "Topology-agnostic Harness workflow with durable resume/pause checkpoints, role-boundary auto-chaining, adaptive review, activation doctor, and machine-enforced gates.",
-  "version": "0.8.0",
+  "description": "Topology-agnostic Harness workflow with durable checkpoints, conversational independent review, canonical AGENTS.md instructions, activation doctor, and machine-enforced gates.",
+  "version": "0.9.0",
   "author": {
     "name": "nguyen tran"
   }

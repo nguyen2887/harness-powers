@@ -40,7 +40,7 @@ topology and require an explicitly shared Harness control plane.
 | `context-worker` | ground the request in repository evidence | mailbox context artifact only |
 | `design-authority` | own contract, design, plan, and freeze reconciliation | planning docs and mailbox artifacts |
 | `implementation-worker` | prepare, build, debug, verify, and reconcile findings | assigned product code, tests, proof, mailbox artifacts |
-| `technical-reviewer` | judge plans or code against the supplied contract and evidence | mailbox verdict only |
+| `technical-reviewer` | independently judge plans/code, debate the draft with the human, and finalize findings | mailbox review artifacts only |
 | `closer` | durable story, trace, friction, and completion bookkeeping | Harness records and close artifact |
 | `human` | explicitly freeze a reviewed plan and authorize external actions | approval record only |
 
@@ -52,6 +52,7 @@ human may choose any suitable actor for the role at claim time.
 ```text
 intake -> context -> contract -> plan-review -> freeze -> human-freeze
                                                      -> approve -> prepare
+human objection: human-freeze -> freeze -> plan-review
 prepare -> verify -> code-review -> reconcile -> close -> closed
               |                         |
               +---- debugging <---------+
@@ -130,10 +131,23 @@ task id. If none are active it asks for a new description.
 
 ## Review Contract
 
-Review artifacts contain mode, verdict, evidence-backed findings, missing
-evidence, and independence level. Reviewers do not patch the reviewed artifact
-or run bookkeeping. Critical and Important findings are reconciled and reviewed
-again; Minor findings are fixed or rejected with a technical reason.
+Review has two internal artifacts without adding a stage. The reviewer first
+writes an independent `*-review-draft.md`, checkpoints, releases the claim, and
+keeps the task at `plan-review` or `code-review`. The human reads the plan/code
+in parallel, then debates the draft in that reviewer conversation. The reviewer
+must challenge unsupported human technical claims while treating product and
+aesthetic choices as human decisions.
+
+Only after discussion settles does the reviewer write the final review artifact
+and advance. It records independent findings, human positions, adjudication,
+required changes, acceptance conditions, verdict, missing evidence, and
+independence. Reviewers never patch the reviewed plan/code. The human then moves
+to the designer/implementer pane and invokes `work <task-id>`; no chat is copied.
+
+Critical and Important findings are reconciled and reviewed again; Minor
+findings are fixed or rejected with a technical reason. At `human-freeze`, a
+question leaves state unchanged, an explicit objection returns to `freeze` with
+a durable human-feedback artifact, and only `approve` unlocks implementation.
 
 After plan review and the explicit human freeze, record two distinct events:
 

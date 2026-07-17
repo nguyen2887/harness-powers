@@ -124,6 +124,46 @@ upsert_block() {
   fi
 }
 
+# Claude Code loads AGENTS.md through the official @ import syntax. Keep
+# AGENTS.md canonical. New/owned CLAUDE.md files become a one-line shim; custom
+# legacy content is preserved behind the import and surfaced for manual merge.
+ensure_claude_shim() {
+  local file="$DIRECTORY/CLAUDE.md" tmp cleaned
+  if [ -f "$file" ] && [ "$(awk 'NF {print}' "$file")" = "@AGENTS.md" ]; then
+    step "CLAUDE.md already imports canonical AGENTS.md."
+    return 0
+  fi
+  if [ "$DRY_RUN" = "--dry-run" ]; then
+    step "DRY RUN: would install @AGENTS.md Claude import shim"
+    return 0
+  fi
+  if [ ! -f "$file" ]; then
+    printf '%s\n' '@AGENTS.md' > "$file"
+    step "Installed CLAUDE.md -> @AGENTS.md import shim."
+    return 0
+  fi
+
+  tmp="$(mktemp)"
+  awk '
+    /HARNESS-POWERS:BEGIN/ {in_old=1; next}
+    in_old && /HARNESS-POWERS:END/ {in_old=0; next}
+    !in_old {print}
+  ' "$file" > "$tmp"
+  cleaned="$(awk 'NF {print}' "$tmp")"
+  if [ -z "$cleaned" ]; then
+    printf '%s\n' '@AGENTS.md' > "$file"
+    step "Replaced legacy owned CLAUDE.md block with @AGENTS.md import shim."
+  else
+    if ! grep -qx '@AGENTS.md' "$tmp"; then
+      { printf '%s\n\n' '@AGENTS.md'; cat "$tmp"; } > "$file"
+    else
+      mv "$tmp" "$file"; tmp=""
+    fi
+    step "WARNING: preserved custom CLAUDE.md content after @AGENTS.md; migrate it into AGENTS.md to reach the one-line canonical setup."
+  fi
+  [ -z "${tmp:-}" ] || rm -f "$tmp"
+}
+
 # --- 1. git init ---------------------------------------------------------------
 if [ -d "$DIRECTORY/.git" ]; then
   step "Git repository already present."
@@ -238,11 +278,9 @@ else
   step "Initialized harness.db."
 fi
 
-# --- 4. CLAUDE.md pipeline block (refreshed in place on re-init) --------------------
-upsert_block "$DIRECTORY/CLAUDE.md" "$TEMPLATES/claude-md-block.md" "CLAUDE.md"
-
-# --- 4b. AGENTS.md pipeline block (Codex / agy / Grok read this; Claude does not) ----
+# --- 4. AGENTS.md is canonical; CLAUDE.md imports it --------------------------
 upsert_block "$DIRECTORY/AGENTS.md" "$TEMPLATES/agents-md-block.md" "AGENTS.md"
+ensure_claude_shim
 
 # --- 5. Lean trace profile note ------------------------------------------------------
 TRACE_SPEC="$DIRECTORY/docs/TRACE_SPEC.md"

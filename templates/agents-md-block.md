@@ -17,6 +17,12 @@ role/review/human boundary, blocker, clarification, closed task, or safety
 budget. Never ask the human to invoke the next same-role stage, copy a handoff,
 or launch another CLI, pane, Task, or sub-agent as an implicit transition.
 
+Plan/code review is conversational but remains independent. The reviewer first
+writes a read-only draft, checkpoints without advancing, and discusses it with
+the human in the reviewer conversation. Only the settled final verdict advances
+the task; then the human switches to the designer/implementer pane and invokes
+`work <task-id>`. Chat conclusions must be persisted before that handoff.
+
 Roles are `context-worker`, `design-authority`, `implementation-worker`,
 `technical-reviewer`, `closer`, and `human`. They are capability contracts, not
 bindings to specific models or providers. A single session may perform several
@@ -36,4 +42,6 @@ Detailed procedures live in the installed skills. If this runtime does not
 support slash or skill invocation, plain `work <description-or-task-id>` and
 `approve <task-id>` are the portable entrypoints. Use `pause <task-id>` before
 switching sessions during a stage; a new session resumes with `work <task-id>`.
+At `human-freeze`, questions leave state unchanged; an explicit objection is
+persisted and returns to design. Only explicit `approve` unlocks implementation.
 <!-- HARNESS-POWERS:END -->

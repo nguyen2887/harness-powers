@@ -55,12 +55,19 @@ fi
 [ -f "$ROOT/harness.db" ] && pass "harness.db present" || \
   fail "harness.db missing; run harness-powers:init, then restore/import durable records as intended"
 
-for file in AGENTS.md CLAUDE.md; do
-  begin="$(grep -c 'HARNESS-POWERS:BEGIN' "$ROOT/$file" 2>/dev/null || true)"
-  end="$(grep -c 'HARNESS-POWERS:END' "$ROOT/$file" 2>/dev/null || true)"
-  [ "$begin:$end" = "1:1" ] && pass "$file has one managed workflow block" || \
-    fail "$file managed block count is begin=$begin end=$end"
-done
+begin="$(grep -c 'HARNESS-POWERS:BEGIN' "$ROOT/AGENTS.md" 2>/dev/null || true)"
+end="$(grep -c 'HARNESS-POWERS:END' "$ROOT/AGENTS.md" 2>/dev/null || true)"
+[ "$begin:$end" = "1:1" ] && pass "AGENTS.md has one managed workflow block" || \
+  fail "AGENTS.md managed block count is begin=$begin end=$end"
+
+claude_nonblank="$(awk 'NF {print}' "$ROOT/CLAUDE.md" 2>/dev/null || true)"
+if [ "$claude_nonblank" = "@AGENTS.md" ]; then
+  pass "CLAUDE.md is the one-line @AGENTS.md import shim"
+elif grep -qx '@AGENTS.md' "$ROOT/CLAUDE.md" 2>/dev/null; then
+  warn "CLAUDE.md imports AGENTS.md but still has custom content; migrate it into AGENTS.md"
+else
+  fail "CLAUDE.md must import canonical instructions with @AGENTS.md"
+fi
 
 for rel in \
   .agents/skills/work/SKILL.md \

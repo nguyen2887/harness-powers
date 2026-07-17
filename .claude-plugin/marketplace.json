@@ -8,7 +8,7 @@
     {
       "name": "harness-powers",
       "source": "./",
-      "description": "Role-based Harness workflow with durable resume/pause checkpoints, shared mailboxes, activation doctor, adaptive review, and machine-enforced gates."
+      "description": "Role-based Harness workflow with durable checkpoints, conversational independent review, canonical AGENTS.md instructions, activation doctor, and machine-enforced gates."
     }
   ]
 }

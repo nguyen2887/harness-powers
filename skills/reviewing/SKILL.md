@@ -1,49 +1,60 @@
 ---
 name: reviewing
-description: Internal technical-review procedure dispatched by harness-powers:work for plan-review or code-review. Read mailbox artifacts and repository evidence, write only the structured verdict artifact to the mailbox, advance state, and stop. Never run harness-cli, project verification, or edit product/docs.
+description: Internal technical-review procedure dispatched by harness-powers:work for plan-review or code-review, including continued human discussion in the reviewer conversation. Review independently, checkpoint a draft without advancing, challenge or accept human feedback with evidence, then persist the final verdict and advance only when the discussion is settled. Never edit the reviewed plan, code, tests, or docs.
 ---
 
 # Technical Review
 
-Review one artifact boundary independently.
-
 **Announce at start:** "Using harness-powers:reviewing in read-only mode."
 
-## Hard Boundary
+Operate read-only on the reviewed work. The reviewer conversation owns review
+and debate; the artifact author applies the final findings later.
 
-- Never run `harness-cli` or modify `harness.db`.
-- Never run project verification; assess the supplied fresh evidence.
-- Never edit the plan, code, tests, or docs. The only allowed write is the
-  supplied mailbox verdict artifact under `.harness-powers/runtime/`.
-- Never launch another CLI, agent, or reviewer.
-- Read additional repository files only to understand or verify a specific claim.
-- Missing required evidence is a finding, not permission to reconstruct it.
+## Boundaries
 
-## Plan Review
+- Never run `harness-cli`, modify `harness.db`, or run project verification.
+- Never edit plan, code, tests, or docs. Write only review artifacts under the
+  task mailbox.
+- Never launch another agent. Read repository files only to verify a claim.
+- Missing evidence is a finding, not permission to reconstruct it.
+- Remain independent: challenge human technical claims when evidence disagrees.
+  Product and aesthetic decisions remain human decisions; explain trade-offs.
 
-Check the contract, design, plan, and verify command for missing requirements,
-contradictions, untestable acceptance criteria, hidden risks, wrong sequencing,
-scope creep, and unsupported assumptions.
+## Independent Draft
 
-## Code Review
+When no review-draft checkpoint exists:
 
-Check the story/contract, diff, and verification evidence for correctness bugs,
-spec deviations, missing tests, security issues, silent behavior changes, and
-evidence that does not actually cover the changed behavior.
+1. Review without waiting for human notes. For plans, inspect contract, design,
+   sequencing, acceptance criteria, risks, and verify command. For code, inspect
+   contract, diff, tests, security, regressions, and supplied verification.
+2. Create `<stage>-draft` through `workflow artifact`. Write `status: draft`, the
+   reviewed artifact, and findings with claim, severity, evidence, and reason.
+3. Run `workflow pause <task> <actor> <draft-artifact>`. Do not advance.
+4. Present the draft and invite the human to debate it in this conversation.
+   Do not tell them to switch panes or invoke `work` yet.
 
-## Output
+## Discussion
 
-Write the `review` schema from `docs/AGENT_WORKFLOW.md` to the supplied mailbox
-artifact. Every finding needs a
-specific claim, severity, evidence, and reason. Do not add praise or general
-summaries. Use `approved` only when there are no Critical/Important findings;
-Minor findings may remain if they are explicit.
+Human replies in this reviewer conversation continue this skill automatically.
+Reclaim the same task, read the checkpoint, and discuss the challenged points.
+Update the draft with concise human positions and reviewer adjudication. If any
+point remains open, pause again on the same draft and keep the stage unchanged.
 
-Advance using the current mailbox stage:
+Do not silently agree. Mark each discussed point `confirmed`, `partially
+confirmed`, `withdrawn`, or `disagreed`, with evidence or a stated human product
+decision.
 
-- plan: `workflow advance <task> <actor> plan-review freeze design-authority <artifact>`
-- code: `workflow advance <task> <actor> code-review reconcile implementation-worker <artifact>`
+## Finalize
 
-Return control to the `work` resolver. It stops at the role boundary and reports
-only the task id, verdict, and that `work <task>` may resume; the artifact owner
-reads the verdict from the mailbox.
+When the human explicitly says to finalize, or the discussion unambiguously
+settles every challenged point:
+
+1. Create a new final artifact labelled `plan-review` or `code-review`.
+2. Record the independent findings, discussion adjudication, final required
+   changes, acceptance conditions, and verdict. Use `approved` only with no
+   Critical/Important finding and no unresolved human objection.
+3. Advance once:
+   - plan: `plan-review -> freeze` for `design-authority`;
+   - code: `code-review -> reconcile` for `implementation-worker`.
+4. Tell the human the final verdict and that the designer/implementer pane may
+   now resume with `work <task>`. Never apply the changes yourself.

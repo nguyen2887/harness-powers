@@ -27,6 +27,7 @@ the role, stage, pane, or handoff prompt.
 ```text
 intake -> context -> contract -> plan-review -> freeze -> human-freeze
                                                      -> approve -> prepare
+human objection: human-freeze -> freeze -> plan-review
 prepare -> verify -> code-review -> reconcile -> close -> closed
               |                         |
               +---- debugging <---------+
@@ -46,7 +47,7 @@ The internal skills are:
 | `intake` | classify lane and persist the request |
 | `context` | collect grounded, read-only repository evidence |
 | `designing` | own contract, design, plan, and freeze reconciliation |
-| `reviewing` | return an evidence-backed read-only plan/code verdict |
+| `reviewing` | draft independently, debate with the human, then finalize a read-only verdict |
 | `implementing` | prepare, build, and reconcile findings |
 | `verifying` | collect fresh mechanical evidence |
 | `debugging` | isolate root cause before changing behavior |
@@ -67,6 +68,11 @@ This removes manual copy/paste between panes. One session can run the whole flow
 or multiple sessions can take successive claims. Plan and code review prefer a
 session independent from the artifact author. Explicit self-review is supported
 only as a recorded degraded-independence mode.
+
+At a review boundary, the reviewer checkpoints an independent draft without
+advancing. The human reads the plan/code while review runs, then debates the
+draft in the reviewer conversation. Only the settled final verdict advances;
+the human then resumes the designer/implementer pane with `work <task-id>`.
 
 For a deliberate mid-stage switch, `pause <task-id>` persists dirty-tree and
 progress evidence without advancing. `work <task-id>` resumes it in another
@@ -117,10 +123,10 @@ Then initialize a project:
 /harness-powers:init
 ```
 
-Re-running init refreshes only harness-powers-owned surfaces: the marked
-instruction blocks, `docs/AGENT_WORKFLOW.md`, portable skills, workflow helper,
-and gate. Existing project files, `harness.db`, and existing hook configuration
-are preserved.
+Re-running init refreshes only harness-powers-owned surfaces: the marked block
+in canonical `AGENTS.md`, the `CLAUDE.md` import shim when safe,
+`docs/AGENT_WORKFLOW.md`, portable skills, workflow helper, and gate. Existing
+project files, `harness.db`, and existing hook configuration are preserved.
 
 Init also:
 
@@ -132,8 +138,11 @@ Init also:
    `.grok/skills/` copies are removed when their Harness ownership is
    recognizable; unrecognized runtime-specific overrides are preserved and
    surfaced by doctor;
-4. installs the shared mailbox helper, doctor, and plan gate;
-5. wires hook adapters when their config files do not already exist.
+4. keeps `AGENTS.md` as the single instruction source and makes `CLAUDE.md`
+   import it with `@AGENTS.md`; custom legacy Claude content is preserved for
+   explicit migration rather than deleted;
+5. installs the shared mailbox helper, doctor, and plan gate;
+6. wires hook adapters when their config files do not already exist.
 
 The installer deliberately does not register specific CLIs or bind roles to
 models. Runtime and model selection remain replaceable deployment policy.

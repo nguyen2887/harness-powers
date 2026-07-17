@@ -63,6 +63,7 @@ require_transition() {
     context:debugging:implementation-worker|context:prepare:implementation-worker|context:contract:design-authority|\
     contract:plan-review:technical-reviewer|plan-review:freeze:design-authority|\
     freeze:plan-review:technical-reviewer|freeze:human-freeze:human|\
+    human-freeze:freeze:design-authority|\
     prepare:verify:implementation-worker|verify:code-review:technical-reviewer|\
     verify:close:closer|\
     verify:debugging:implementation-worker|debugging:verify:implementation-worker|\
@@ -113,10 +114,12 @@ cmd_show() {
 }
 
 cmd_claim() {
-  [ "$#" -ge 2 ] || die "usage: claim <task-id> <actor-id> [--allow-self]"
-  local task="$1" actor="$2" allow_self="${3:-}" stage author d now expires owner owner_pid recovered=""
+  [ "$#" -ge 2 ] || die "usage: claim <task-id> <actor-id> [--allow-self|--human-feedback]"
+  local task="$1" actor="$2" claim_mode="${3:-}" stage author d now expires owner owner_pid recovered=""
   require_task "$task"; stage="$(read_field "$task" stage)"
-  [ "$stage" != "human-freeze" ] || die "task '$task' awaits explicit human approval"
+  if [ "$stage" = "human-freeze" ] && [ "$claim_mode" != "--human-feedback" ]; then
+    die "task '$task' awaits explicit human approval or feedback"
+  fi
   [ "$stage" != "closed" ] || die "task '$task' is closed"
   d="$(claim_dir "$task")"; now="$(date +%s)"
   if [ -d "$d" ]; then
@@ -150,12 +153,16 @@ cmd_claim() {
     fi
   fi
   mkdir "$d" 2>/dev/null || die "stage claim raced; try again"
+  if [ "$claim_mode" = "--human-feedback" ] && [ "$(read_field "$task" stage)" != "human-freeze" ]; then
+    rm -rf "$d"
+    die "task '$task' left human-freeze before feedback could claim it"
+  fi
   printf '%s\n' "$actor" > "$d/owner"
   printf '%s\n' "$((now + LEASE_SECONDS))" > "$d/expires"
   case "$stage" in
     plan-review|code-review)
       author="$(read_field "$task" artifact_author)"
-      if [ -n "$author" ] && [ "$author" = "$actor" ] && [ "$allow_self" != "--allow-self" ]; then
+      if [ -n "$author" ] && [ "$author" = "$actor" ] && [ "$claim_mode" != "--allow-self" ]; then
         rm -rf "$d"
         die "current actor authored the review artifact; use another session or explicit --allow-self"
       fi
@@ -273,13 +280,17 @@ cmd_set_review_policy() {
 cmd_next_action() {
   [ "$#" -eq 5 ] || die "usage: next-action <task-id> <previous-stage> <previous-role> <stages-run> <debug-runs>"
   local task="$1" previous_stage="$2" previous_role="$3" stages_run="$4" debug_runs="$5"
-  local stage role action=stop reason=role-boundary
+  local stage role checkpoint action=stop reason=role-boundary
   require_task "$task"
   case "$stages_run" in ""|*[!0-9]*) die "stage counter must be numeric" ;; esac
   case "$debug_runs" in ""|*[!0-9]*) die "debug counter must be numeric" ;; esac
   stage="$(read_field "$task" stage)"; role="$(read_field "$task" required_role)"
+  checkpoint="$(read_field "$task" checkpoint_artifact)"
   if [ "$stage" = closed ]; then reason=closed
   elif [ "$stage" = human-freeze ]; then reason=human-boundary
+  elif { [ "$stage" = plan-review ] || [ "$stage" = code-review ]; } && \
+       case "$checkpoint" in *-review-draft.md) true ;; *) false ;; esac; then
+    reason=human-review-discussion
   elif [ "$stage" = plan-review ] || [ "$stage" = code-review ]; then reason=review-boundary
   elif [ "$stages_run" -ge 6 ]; then reason=stage-budget
   elif [ "$debug_runs" -ge 2 ]; then reason=debug-budget
@@ -292,7 +303,7 @@ cmd_next_action() {
 
 cmd_approve() {
   [ "$#" -eq 1 ] || die "usage: approve <task-id>"
-  local task="$1" stage lock
+  local task="$1" stage lock d
   require_task "$task"; lock="$(task_dir "$task")/approve-lock"
   mkdir "$lock" 2>/dev/null || die "approval for task '$task' is already in progress"
   APPROVAL_LOCK="$lock"
@@ -302,6 +313,13 @@ cmd_approve() {
     rmdir "$lock"
     die "task '$task' is at '$stage', not human-freeze"
   fi
+  d="$(claim_dir "$task")"
+  mkdir "$d" 2>/dev/null || die "task '$task' has an active human-feedback decision"
+  if [ "$(read_field "$task" stage)" != "human-freeze" ]; then
+    rm -rf "$d"
+    die "task '$task' left human-freeze before approval could lock it"
+  fi
+  printf '%s\n' human-approval > "$d/owner"
   write_field "$task" stage prepare
   write_field "$task" required_role implementation-worker
   write_field "$task" status ready

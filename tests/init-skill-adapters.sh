@@ -17,6 +17,10 @@ printf '%s\n' custom > "$TMP/.grok/skills/custom/SKILL.md"
 
 "$ROOT/scripts/init-project.sh" "$TMP" >/dev/null
 
+[ "$(awk 'NF {print}' "$TMP/CLAUDE.md")" = '@AGENTS.md' ]
+[ "$(grep -c 'HARNESS-POWERS:BEGIN' "$TMP/AGENTS.md")" -eq 1 ]
+[ "$(grep -c 'HARNESS-POWERS:BEGIN' "$TMP/CLAUDE.md" || true)" -eq 0 ]
+
 for src in "$ROOT/portable-skills"/*/; do
   name="$(basename "$src")"
   [ -f "$TMP/.agents/skills/$name/SKILL.md" ]
@@ -30,5 +34,15 @@ for src in "$ROOT/portable-skills"/*/; do
 done
 
 [ -f "$TMP/.grok/skills/custom/SKILL.md" ]
+
+CUSTOM="$TMP/custom-project"
+mkdir -p "$CUSTOM/scripts/bin"
+cp "$TMP/scripts/bin/harness-cli" "$CUSTOM/scripts/bin/harness-cli"
+printf '%s\n' '# Claude-specific legacy note' > "$CUSTOM/CLAUDE.md"
+"$ROOT/scripts/init-project.sh" "$CUSTOM" >/dev/null
+grep -qx '@AGENTS.md' "$CUSTOM/CLAUDE.md"
+grep -q 'Claude-specific legacy note' "$CUSTOM/CLAUDE.md"
+[ "$(grep -c 'HARNESS-POWERS:BEGIN' "$CUSTOM/CLAUDE.md" || true)" -eq 0 ]
+[ "$(grep -c 'HARNESS-POWERS:BEGIN' "$CUSTOM/AGENTS.md")" -eq 1 ]
 
 echo 'init skill adapter tests: PASS'

@@ -36,16 +36,29 @@ For each stage:
    expired owner was recovered.
 3. For review authored by this actor, require another session or explicit
    degraded self-review before retrying with `--allow-self`.
-4. Create a mailbox artifact and execute the mapped internal skill.
-5. Increment stage/debug counters and run
-   `workflow next-action <task> <previous-stage> <previous-role> <stages-run> <debug-runs>`.
-   Obey its `continue` or `stop` result.
+4. Create a mailbox artifact when the internal procedure requires one and
+   execute the mapped skill.
+5. If `reviewing` paused on a `*-review-draft.md` checkpoint, stop immediately
+   for human discussion and do not call `next-action`. Otherwise increment
+   stage/debug counters, run `workflow next-action <task> <previous-stage>
+   <previous-role> <stages-run> <debug-runs>`, and obey its result.
 
 If a checkpoint exists or claim recovery occurred, perform an interrupted-work
 preflight before stage work: read the checkpoint and latest completed artifact,
 inspect the wrapper and affected nested Git working trees, compare partial
 changes with the frozen plan and base commit, and state what will be preserved,
 completed, or redone. Never discard unexplained dirty work.
+
+For `plan-review` or `code-review`, a checkpoint whose filename ends in
+`-review-draft.md` is an intentional human-discussion boundary, not an aborted
+review. Resume `reviewing` from that draft. If the human has not supplied new
+feedback, present the draft and wait; never finalize merely because another pane
+invoked `work`.
+
+At `human-freeze`, answer clarification without changing state. On an explicit
+human objection, claim with `--human-feedback`, create a `human-feedback`
+artifact containing the concern, and advance `human-freeze -> freeze` for
+`design-authority`. Only `approve` may advance to implementation.
 
 | Stage | Internal skill |
 | --- | --- |

@@ -1,6 +1,6 @@
 # Initializes a project with the vendored repository-harness scaffold and the
 # harness-powers pipeline: git init, merge-copy scaffold files, install
-# harness-cli, create harness.db, wire CLAUDE.md/AGENTS.md, register external tools.
+# harness-cli, create harness.db, wire canonical AGENTS.md plus the Claude import, and register hooks.
 # Idempotent. Re-running REFRESHES harness-powers-owned artifacts (pipeline blocks
 # between markers, vendored skills, the gate script) so a new plugin version lands
 # without deleting anything by hand; your own files are never overwritten.
@@ -108,6 +108,43 @@ function Upsert-Block($file, $template, $label) {
         $sep = if ($existing -and -not $existing.EndsWith("`n")) { "`n`n" } elseif ($existing) { "`n" } else { '' }
         Set-Content -Path $file -Value ($existing + $sep + $block) -NoNewline
         Write-Step "Appended harness-powers block to $label."
+    }
+}
+
+function Ensure-ClaudeShim {
+    $file = Join-Path $Directory 'CLAUDE.md'
+    if (Test-Path $file) {
+        $nonBlank = @(Get-Content $file | Where-Object { $_.Trim() })
+        if ($nonBlank.Count -eq 1 -and $nonBlank[0].Trim() -eq '@AGENTS.md') {
+            Write-Step 'CLAUDE.md already imports canonical AGENTS.md.'
+            return
+        }
+    }
+    if ($DryRun) {
+        Write-Step 'DRY RUN: would install @AGENTS.md Claude import shim'
+        return
+    }
+    if (-not (Test-Path $file)) {
+        Set-Content -Path $file -Value '@AGENTS.md'
+        Write-Step 'Installed CLAUDE.md -> @AGENTS.md import shim.'
+        return
+    }
+
+    $existing = Get-Content $file -Raw
+    $cleaned = [regex]::Replace(
+        $existing,
+        '(?s)<!-- HARNESS-POWERS:BEGIN -->.*?<!-- HARNESS-POWERS:END -->',
+        ''
+    ).Trim()
+    if (-not $cleaned) {
+        Set-Content -Path $file -Value '@AGENTS.md'
+        Write-Step 'Replaced legacy owned CLAUDE.md block with @AGENTS.md import shim.'
+    } else {
+        if ($cleaned -notmatch '(?m)^@AGENTS\.md\s*$') {
+            $cleaned = "@AGENTS.md`n`n$cleaned"
+        }
+        Set-Content -Path $file -Value $cleaned
+        Write-Step 'WARNING: preserved custom CLAUDE.md content after @AGENTS.md; migrate it into AGENTS.md to reach the one-line canonical setup.'
     }
 }
 
@@ -224,11 +261,9 @@ if ((-not (Test-Path $cli)) -and $DryRun) {
     Write-Step 'Initialized harness.db.'
 }
 
-# --- 4. CLAUDE.md pipeline block (refreshed in place on re-init) ----------------
-Upsert-Block (Join-Path $Directory 'CLAUDE.md') (Join-Path $templates 'claude-md-block.md') 'CLAUDE.md'
-
-# --- 4b. AGENTS.md pipeline block (Codex / agy / Grok read this; Claude does not) --
+# --- 4. AGENTS.md is canonical; CLAUDE.md imports it ---------------------------
 Upsert-Block (Join-Path $Directory 'AGENTS.md') (Join-Path $templates 'agents-md-block.md') 'AGENTS.md'
+Ensure-ClaudeShim
 
 # --- 5. Lean trace profile note (covers pre-existing harness repos) --------------
 $traceSpec = Join-Path $Directory 'docs\TRACE_SPEC.md'
